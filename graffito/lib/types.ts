@@ -11,6 +11,8 @@ export type TipoMovimiento =
 
 export type EstadoStock = "en-stock" | "bajo" | "agotado";
 
+export type TipoProductoBase = "tomatodo" | "agenda" | "muller" | "refill";
+
 export interface Categoria {
   id: string;
   nombre: string;
@@ -18,36 +20,36 @@ export interface Categoria {
   orden: number;
 }
 
-export interface Variante {
-  id: string;
-  nombre: string;
-  stock: number;
-  stockMinimo: number;
-  imageUrl?: string;
-  codigoBarras?: string;
+export interface ItemBaseCombo {
+  tipoProducto: TipoProductoBase;
+  codigo: string;
+  cantidad: number;
 }
 
+/** Document id in `productos/{codigo}` is always the product's `codigo`. */
 export interface Producto {
   id: string;
+  codigo: string;
   nombre: string;
   categoria: string;
   precio: number;
   descripcion: string;
   imageUrl: string;
+  stock: number;
+  stockMinimo: number;
   creadoEn: Timestamp | null;
   actualizadoEn: Timestamp | null;
-}
-
-export interface ProductoConVariantes extends Producto {
-  variantes: Variante[];
+  /** Present only on combo products. */
+  tipo?: "combo";
+  /** Present only on combo products — the base products a sale must atomically decrement. */
+  itemsBase?: ItemBaseCombo[];
 }
 
 export interface MovimientoStock {
   id: string;
   productoId: string;
-  varianteId: string;
-  nombreProducto: string;
-  nombreVariante: string;
+  codigo: string;
+  nombre: string;
   tipo: TipoMovimiento;
   cantidad: number;
   fecha: Timestamp | null;
@@ -55,15 +57,27 @@ export interface MovimientoStock {
   notas?: string;
 }
 
+/**
+ * Engraving choice for a cart/sale line.
+ * - "ninguno": not engraved.
+ * - "unico": one engraving text shared by every unit in the line.
+ * - "individual": one engraving text per unit (`textos.length === cantidad`).
+ * - "combo": independent, optional engraving for the agenda and the pen that make up a combo.
+ */
+export type GrabadoInfo =
+  | { modo: "ninguno" }
+  | { modo: "unico"; texto: string }
+  | { modo: "individual"; textos: string[] }
+  | { modo: "combo"; agenda?: string; boligrafo?: string };
+
 export interface VentaItem {
   productoId: string;
-  varianteId: string;
-  nombreProducto: string;
-  nombreVariante: string;
+  codigo: string;
+  nombre: string;
   cantidad: number;
   precioUnitario: number;
-  grabado: boolean;
-  textoGrabado?: string;
+  subtotal: number;
+  grabado: GrabadoInfo;
 }
 
 export interface Venta {
@@ -105,15 +119,14 @@ export interface ConfiguracionGeneral {
 }
 
 export interface CartItem {
-  key: string;
   productoId: string;
-  varianteId: string;
-  nombreProducto: string;
-  nombreVariante: string;
+  codigo: string;
+  nombre: string;
+  categoria: string;
   precioUnitario: number;
   cantidad: number;
   stockDisponible: number;
   imageUrl: string;
-  grabado: boolean;
-  textoGrabado: string;
+  tipo?: "combo";
+  grabado: GrabadoInfo;
 }

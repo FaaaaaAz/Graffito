@@ -1,8 +1,8 @@
 import {
   collection,
-  collectionGroup,
   deleteDoc,
   doc,
+  getDoc,
   getDocs,
   limit,
   onSnapshot,
@@ -15,6 +15,8 @@ import {
   updateDoc,
   where,
   writeBatch,
+  type DocumentReference,
+  type DocumentSnapshot,
   type QueryDocumentSnapshot,
 } from "firebase/firestore";
 import { db } from "./firebase";
@@ -22,11 +24,12 @@ import type {
   Categoria,
   CierreDiario,
   ConfiguracionGeneral,
+  GrabadoInfo,
+  ItemBaseCombo,
   MetodoPago,
   MovimientoStock,
   Producto,
   TipoMovimiento,
-  Variante,
   Venta,
   VentaItem,
 } from "./types";
@@ -64,7 +67,7 @@ export async function deleteCategoria(id: string) {
 }
 
 // ---------------------------------------------------------------------------
-// Productos y variantes
+// Productos (flat — no variantes subcollection; document id === codigo)
 // ---------------------------------------------------------------------------
 
 export function subscribeProductos(cb: (productos: Producto[]) => void) {
@@ -74,105 +77,48 @@ export function subscribeProductos(cb: (productos: Producto[]) => void) {
   });
 }
 
-export function subscribeVariantesGroup(
-  cb: (variantesPorProducto: Record<string, Variante[]>) => void
-) {
-  const q = collectionGroup(db, "variantes");
-  return onSnapshot(q, (snap) => {
-    const map: Record<string, Variante[]> = {};
-    snap.docs.forEach((d) => {
-      const productoId = d.ref.parent.parent?.id;
-      if (!productoId) return;
-      if (!map[productoId]) map[productoId] = [];
-      map[productoId].push(withId<Variante>(d));
-    });
-    cb(map);
-  });
-}
-
-export interface NuevaVariante {
+export interface NuevoProductoInput {
+  codigo: string;
   nombre: string;
+  categoria: string;
+  precio: number;
+  descripcion: string;
+  imageUrl: string;
   stock: number;
   stockMinimo: number;
-  imageUrl?: string;
+  tipo?: "combo";
+  itemsBase?: ItemBaseCombo[];
 }
 
-export async function addProducto(
-  data: Omit<Producto, "id" | "creadoEn" | "actualizadoEn">,
-  variantesIniciales: NuevaVariante[],
-  stockMinimoGlobal: number
-) {
-  const productoRef = doc(collection(db, "productos"));
-  const batch = writeBatch(db);
+export async function addProducto(data: NuevoProductoInput) {
+  const codigo = data.codigo.trim().toUpperCase();
+  const ref = doc(db, "productos", codigo);
+  const existing = await getDoc(ref);
+  if (existing.exists()) {
+    throw new Error(`Ya existe un producto con el código "${codigo}".`);
+  }
 
-  batch.set(productoRef, {
+  await setDoc(ref, {
     ...data,
+    codigo,
     creadoEn: serverTimestamp(),
     actualizadoEn: serverTimestamp(),
   });
-
-  const variantes =
-    variantesIniciales.length > 0
-      ? variantesIniciales
-      : [{ nombre: "Estándar", stock: 0, stockMinimo: stockMinimoGlobal }];
-
-  variantes.forEach((v) => {
-    const varRef = doc(collection(productoRef, "variantes"));
-    batch.set(varRef, {
-      nombre: v.nombre,
-      stock: v.stock,
-      stockMinimo: v.stockMinimo,
-      imageUrl: v.imageUrl || data.imageUrl,
-      codigoBarras: "",
-    });
-  });
-
-  await batch.commit();
-  return productoRef.id;
+  return codigo;
 }
 
 export async function updateProducto(
-  id: string,
-  data: Partial<Omit<Producto, "id" | "creadoEn" | "actualizadoEn">>
+  codigo: string,
+  data: Partial<Omit<NuevoProductoInput, "codigo">>
 ) {
-  await updateDoc(doc(db, "productos", id), {
+  await updateDoc(doc(db, "productos", codigo), {
     ...data,
     actualizadoEn: serverTimestamp(),
   });
 }
 
-export async function deleteProducto(id: string) {
-  const productoRef = doc(db, "productos", id);
-  const variantesSnap = await getDocs(collection(productoRef, "variantes"));
-  const batch = writeBatch(db);
-  variantesSnap.docs.forEach((v) => batch.delete(v.ref));
-  batch.delete(productoRef);
-  await batch.commit();
-}
-
-export async function addVariante(productoId: string, data: NuevaVariante) {
-  const productoRef = doc(db, "productos", productoId);
-  const varRef = doc(collection(productoRef, "variantes"));
-  await setDoc(varRef, {
-    nombre: data.nombre,
-    stock: data.stock,
-    stockMinimo: data.stockMinimo,
-    imageUrl: data.imageUrl ?? "",
-    codigoBarras: "",
-  });
-  return varRef.id;
-}
-
-export async function updateVariante(
-  productoId: string,
-  varianteId: string,
-  data: Partial<Omit<Variante, "id">>
-) {
-  await updateDoc(doc(db, "productos", productoId, "variantes", varianteId), data);
-}
-
-export async function deleteVariante(productoId: string, varianteId: string) {
-  await deleteDoc(doc(db, "productos", productoId, "variantes", varianteId));
+export async function deleteProducto(codigo: string) {
+  await deleteDoc(doc(db, "productos", codigo));
 }
 
 // ---------------------------------------------------------------------------
@@ -195,9 +141,7 @@ export function subscribeMovimientos(
 
 export interface AjusteStockInput {
   productoId: string;
-  varianteId: string;
-  nombreProducto: string;
-  nombreVariante: string;
+  nombre: string;
   delta: number;
   tipo: TipoMovimiento;
   notas?: string;
@@ -205,18 +149,12 @@ export interface AjusteStockInput {
 }
 
 export async function adjustStock(input: AjusteStockInput) {
-  const varianteRef = doc(
-    db,
-    "productos",
-    input.productoId,
-    "variantes",
-    input.varianteId
-  );
+  const ref = doc(db, "productos", input.productoId);
 
   await runTransaction(db, async (transaction) => {
-    const snap = await transaction.get(varianteRef);
+    const snap = await transaction.get(ref);
     if (!snap.exists()) {
-      throw new Error("La variante ya no existe.");
+      throw new Error("El producto ya no existe.");
     }
     const stockActual = (snap.data().stock as number) ?? 0;
     const nuevoStock = stockActual + input.delta;
@@ -224,14 +162,13 @@ export async function adjustStock(input: AjusteStockInput) {
       throw new Error("El stock no puede quedar negativo.");
     }
 
-    transaction.update(varianteRef, { stock: nuevoStock });
+    transaction.update(ref, { stock: nuevoStock });
 
     const movimientoRef = doc(collection(db, "movimientosStock"));
     transaction.set(movimientoRef, {
       productoId: input.productoId,
-      varianteId: input.varianteId,
-      nombreProducto: input.nombreProducto,
-      nombreVariante: input.nombreVariante,
+      codigo: input.productoId,
+      nombre: input.nombre,
       tipo: input.tipo,
       cantidad: input.delta,
       fecha: serverTimestamp(),
@@ -242,47 +179,113 @@ export async function adjustStock(input: AjusteStockInput) {
 }
 
 // ---------------------------------------------------------------------------
-// Ventas
+// Ventas — atomic, combo-aware stock deduction
 // ---------------------------------------------------------------------------
 
+export interface NuevaVentaItemInput {
+  productoId: string;
+  cantidad: number;
+  grabado: GrabadoInfo;
+}
+
 export interface NuevaVentaInput {
-  items: VentaItem[];
+  items: NuevaVentaItemInput[];
   metodoPago: MetodoPago;
   cliente?: string;
   usuarioId: string;
 }
 
+/**
+ * Sells one or more products/combos in a single atomic transaction.
+ *
+ * A combo's own `stock` is never touched by a sale — only the underlying
+ * `itemsBase` products are decremented (mirrors how the combo is physically
+ * assembled from existing agenda + pen inventory). Quantities needed for the
+ * same base product are summed across every cart line (whether it comes from
+ * a combo or is bought directly) before a single stock check + write, so a
+ * mixed cart can never oversell a shared base product.
+ */
 export async function createVenta(input: NuevaVentaInput) {
   const ventaRef = doc(collection(db, "ventas"));
-  const total = input.items.reduce(
-    (sum, item) => sum + item.precioUnitario * item.cantidad,
-    0
+  const topRefs = input.items.map((item) =>
+    doc(db, "productos", item.productoId)
   );
 
-  const varianteRefs = input.items.map((item) =>
-    doc(db, "productos", item.productoId, "variantes", item.varianteId)
-  );
-
-  await runTransaction(db, async (transaction) => {
-    const snaps = await Promise.all(
-      varianteRefs.map((ref) => transaction.get(ref))
+  const total = await runTransaction(db, async (transaction) => {
+    const topSnaps = await Promise.all(
+      topRefs.map((ref) => transaction.get(ref))
     );
 
-    snaps.forEach((snap, index) => {
+    const ventaItems: VentaItem[] = [];
+    const descuentos = new Map<
+      string,
+      { ref: DocumentReference; cantidad: number; snap?: DocumentSnapshot }
+    >();
+
+    topSnaps.forEach((snap, index) => {
       const item = input.items[index];
       if (!snap.exists()) {
-        throw new Error(`La variante "${item.nombreVariante}" ya no existe.`);
+        throw new Error(`El producto "${item.productoId}" ya no existe.`);
       }
-      const stockActual = (snap.data().stock as number) ?? 0;
-      if (stockActual < item.cantidad) {
+      const data = snap.data() as Producto;
+
+      ventaItems.push({
+        productoId: data.codigo,
+        codigo: data.codigo,
+        nombre: data.nombre,
+        cantidad: item.cantidad,
+        precioUnitario: data.precio,
+        subtotal: data.precio * item.cantidad,
+        grabado: item.grabado,
+      });
+
+      if (data.tipo === "combo" && data.itemsBase && data.itemsBase.length > 0) {
+        data.itemsBase.forEach((base) => {
+          const cantidadNecesaria = base.cantidad * item.cantidad;
+          const existing = descuentos.get(base.codigo);
+          descuentos.set(base.codigo, {
+            ref: doc(db, "productos", base.codigo),
+            cantidad: (existing?.cantidad ?? 0) + cantidadNecesaria,
+          });
+        });
+      } else {
+        const existing = descuentos.get(data.codigo);
+        descuentos.set(data.codigo, {
+          ref: topRefs[index],
+          cantidad: (existing?.cantidad ?? 0) + item.cantidad,
+          snap, // already fetched above — no need to re-read
+        });
+      }
+    });
+
+    const entries = Array.from(descuentos.entries());
+    const pending = entries.filter(([, d]) => !d.snap);
+    const fetched = await Promise.all(
+      pending.map(([, d]) => transaction.get(d.ref))
+    );
+    pending.forEach(([, d], i) => {
+      d.snap = fetched[i];
+    });
+
+    entries.forEach(([codigo, d]) => {
+      const snap = d.snap!;
+      if (!snap.exists()) {
+        throw new Error(`El producto base "${codigo}" ya no existe.`);
+      }
+      const stockActual = (snap.data()!.stock as number) ?? 0;
+      if (stockActual < d.cantidad) {
         throw new Error(
-          `Stock insuficiente para ${item.nombreProducto} (${item.nombreVariante}). Disponible: ${stockActual}.`
+          `Stock insuficiente de "${
+            (snap.data()!.nombre as string) ?? codigo
+          }". Disponible: ${stockActual}, necesario: ${d.cantidad}.`
         );
       }
     });
 
+    const total = ventaItems.reduce((sum, item) => sum + item.subtotal, 0);
+
     transaction.set(ventaRef, {
-      items: input.items,
+      items: ventaItems,
       total,
       metodoPago: input.metodoPago,
       cliente: input.cliente ?? "",
@@ -290,26 +293,25 @@ export async function createVenta(input: NuevaVentaInput) {
       usuarioId: input.usuarioId,
     });
 
-    snaps.forEach((snap, index) => {
-      const item = input.items[index];
+    entries.forEach(([codigo, d]) => {
+      const snap = d.snap!;
       const stockActual = (snap.data()!.stock as number) ?? 0;
-      transaction.update(varianteRefs[index], {
-        stock: stockActual - item.cantidad,
-      });
+      transaction.update(d.ref, { stock: stockActual - d.cantidad });
 
       const movimientoRef = doc(collection(db, "movimientosStock"));
       transaction.set(movimientoRef, {
-        productoId: item.productoId,
-        varianteId: item.varianteId,
-        nombreProducto: item.nombreProducto,
-        nombreVariante: item.nombreVariante,
+        productoId: codigo,
+        codigo,
+        nombre: (snap.data()!.nombre as string) ?? codigo,
         tipo: "venta",
-        cantidad: item.cantidad,
+        cantidad: d.cantidad,
         fecha: serverTimestamp(),
         usuarioId: input.usuarioId,
         notas: "",
       });
     });
+
+    return total;
   });
 
   return { id: ventaRef.id, total };
@@ -371,8 +373,131 @@ export async function updateConfiguracion(data: Partial<ConfiguracionGeneral>) {
 }
 
 // ---------------------------------------------------------------------------
-// Datos de ejemplo (seed)
+// Datos de ejemplo (seed) — Graffito's real catalog
 // ---------------------------------------------------------------------------
+
+interface ProductoSeed extends NuevoProductoInput {
+  codigo: string;
+}
+
+function buildCatalogoSeed(): ProductoSeed[] {
+  const tomatodos: ProductoSeed[] = [
+    ["MOODNE", "Tomatodo Negro", "tomatodo-negro"],
+    ["MOODROSA", "Tomatodo Rosado", "tomatodo-rosado"],
+    ["MOODVE", "Tomatodo Verde", "tomatodo-verde"],
+    ["MOODCE", "Tomatodo Celeste", "tomatodo-celeste"],
+    ["MOODMI", "Tomatodo Mint", "tomatodo-mint"],
+    ["MOODLI", "Tomatodo Lila", "tomatodo-lila"],
+    ["MOODCA", "Tomatodo Café", "tomatodo-cafe"],
+    ["MOODAZ", "Tomatodo Azul", "tomatodo-azul"],
+    ["MOODTU", "Tomatodo Turquesa", "tomatodo-turquesa"],
+  ].map(([codigo, nombre, archivo]) => ({
+    codigo,
+    nombre,
+    categoria: "Tomatodos",
+    precio: 200,
+    descripcion: "",
+    imageUrl: `/images/products/tomatodos/${archivo}.jpg`,
+    stock: 10,
+    stockMinimo: 5,
+  }));
+
+  const agendas: ProductoSeed[] = [
+    ["AGNE", "Agenda Negra", "agenda-negro"],
+    ["AGAZ", "Agenda Azul", "agenda-azul"],
+    ["AGCA", "Agenda Café", "agenda-cafe"],
+    ["AGRO", "Agenda Roja", "agenda-rojo"],
+    ["AGNA", "Agenda Amarilla", "agenda-amarillo"],
+    ["AGROS", "Agenda Rosada", "agenda-rosada"],
+  ].map(([codigo, nombre, archivo]) => ({
+    codigo,
+    nombre,
+    categoria: "Agendas",
+    precio: 100,
+    descripcion: "",
+    imageUrl: `/images/products/agendas/${archivo}.jpg`,
+    stock: 8,
+    stockMinimo: 5,
+  }));
+
+  const mullerPrecios: Array<[string, number]> = [
+    ["MU1101", 160],
+    ["MU1107", 150],
+    ["MU1108", 150],
+    ["MU1109", 150],
+    ["MU1110", 150],
+    ["MU1111", 150],
+    ["MU1100", 160],
+    ["MU1112", 160],
+    ["MU4000", 200],
+    ["MU5000", 200],
+    ["MU5001", 200],
+    ["MU6000", 250],
+    ["MU7000", 190],
+    ["MU8000", 170],
+    ["MU4001", 200],
+    ["MU8001", 180],
+    ["MU9000", 180],
+    ["MU9001", 180],
+    ["MU9002", 170],
+  ];
+  const muller: ProductoSeed[] = mullerPrecios.map(([codigo, precio]) => ({
+    codigo,
+    nombre: `Muller ${codigo}`,
+    categoria: "Muller",
+    precio,
+    descripcion: "",
+    imageUrl: `/images/products/muller/${codigo.toLowerCase()}.jpg`,
+    stock: 12,
+    stockMinimo: 5,
+  }));
+
+  const combosSeed: Array<{
+    codigo: string;
+    agenda: { codigo: string; nombre: string };
+    muller: string;
+    imagen: string;
+  }> = [
+    { codigo: "AG1108", agenda: { codigo: "AGRO", nombre: "Agenda Roja" }, muller: "MU1108", imagen: "ag1108" },
+    { codigo: "AG1110-1", agenda: { codigo: "AGNE", nombre: "Agenda Negra" }, muller: "MU1110", imagen: "ag1110-1" },
+    { codigo: "AG1107", agenda: { codigo: "AGAZ", nombre: "Agenda Azul" }, muller: "MU1107", imagen: "ag1107" },
+    { codigo: "AG1101-3", agenda: { codigo: "AGAZ", nombre: "Agenda Azul" }, muller: "MU1101", imagen: "ag1101-3" },
+    { codigo: "AG1101-5", agenda: { codigo: "AGNA", nombre: "Agenda Amarilla" }, muller: "MU1101", imagen: "ag1101-5" },
+    { codigo: "AG1101-2", agenda: { codigo: "AGNE", nombre: "Agenda Negra" }, muller: "MU1101", imagen: "ag1101-2" },
+    { codigo: "AG1100-1", agenda: { codigo: "AGCA", nombre: "Agenda Café" }, muller: "MU1100", imagen: "ag1100-1" },
+    { codigo: "AG5001", agenda: { codigo: "AGNE", nombre: "Agenda Negra" }, muller: "MU5001", imagen: "ag5001" },
+    { codigo: "AG5001-CAFE", agenda: { codigo: "AGCA", nombre: "Agenda Café" }, muller: "MU5001", imagen: "ag5001-cafe" },
+    { codigo: "AG5000", agenda: { codigo: "AGAZ", nombre: "Agenda Azul" }, muller: "MU5000", imagen: "ag5000" },
+    { codigo: "AG6000", agenda: { codigo: "AGCA", nombre: "Agenda Café" }, muller: "MU6000", imagen: "ag6000" },
+  ];
+  const mullerPrecioPorCodigo = new Map(mullerPrecios);
+  const combos: ProductoSeed[] = combosSeed.map((c) => {
+    const precioMuller = mullerPrecioPorCodigo.get(c.muller) ?? 0;
+    return {
+      codigo: c.codigo,
+      nombre: `Combo ${c.agenda.nombre} + Bolígrafo ${c.muller}`,
+      categoria: "Combos",
+      precio: 100 + precioMuller - 10,
+      descripcion: "",
+      imageUrl: `/images/products/combos/${c.imagen}.jpg`,
+      stock: 5,
+      stockMinimo: 5,
+      tipo: "combo" as const,
+      itemsBase: [
+        { tipoProducto: "agenda" as const, codigo: c.agenda.codigo, cantidad: 1 },
+        { tipoProducto: "muller" as const, codigo: c.muller, cantidad: 1 },
+      ],
+    };
+  });
+
+  const refills: ProductoSeed[] = [
+    { codigo: "TINTA-SECA", nombre: "Tinta Seca", categoria: "Refills", precio: 25, descripcion: "", imageUrl: "/images/products/refills/tinta_seca.jpg", stock: 50, stockMinimo: 5 },
+    { codigo: "TINTA-HUMEDA", nombre: "Tinta Húmeda", categoria: "Refills", precio: 15, descripcion: "", imageUrl: "/images/products/refills/tinta_humeda.jpg", stock: 50, stockMinimo: 5 },
+    { codigo: "PLUMA-FUENTE", nombre: "Pluma Fuente", categoria: "Refills", precio: 20, descripcion: "", imageUrl: "/images/products/refills/pluma_fuente.jpg", stock: 50, stockMinimo: 5 },
+  ];
+
+  return [...tomatodos, ...agendas, ...muller, ...combos, ...refills];
+}
 
 export async function ensureSeedData() {
   // Claim the seed slot atomically so two concurrent callers (e.g. React
@@ -389,14 +514,7 @@ export async function ensureSeedData() {
 
   const batch = writeBatch(db);
 
-  const categoriasDefault = [
-    "Bolígrafos",
-    "Tomatodos",
-    "Agendas",
-    "Manillas",
-    "Collares",
-    "Llaveros",
-  ];
+  const categoriasDefault = ["Tomatodos", "Agendas", "Muller", "Combos", "Refills"];
   categoriasDefault.forEach((nombre, index) => {
     const ref = doc(collection(db, "categorias"));
     batch.set(ref, { nombre, icono: "", orden: index });
@@ -404,77 +522,19 @@ export async function ensureSeedData() {
 
   batch.set(doc(db, "configuracion", "general"), {
     nombreEmpresa: "Graffito",
-    logoUrl: "",
+    logoUrl: "/images/graffitoLogo.png",
     telefono: "",
     email: "",
     direccion: "",
     stockMinimoGlobal: 5,
   });
 
-  const productosSeed: Array<{
-    nombre: string;
-    categoria: string;
-    precio: number;
-    descripcion: string;
-    imageUrl: string;
-    variantes: Array<{ nombre: string; stock: number }>;
-  }> = [
-    {
-      nombre: "Bolígrafo Parker",
-      categoria: "Bolígrafos",
-      precio: 45,
-      descripcion: "Bolígrafo de gama alta, ideal para grabado personalizado.",
-      imageUrl: "https://placehold.co/400x400/1E1E1E/F5C518?text=Boligrafo",
-      variantes: [
-        { nombre: "Negro", stock: 10 },
-        { nombre: "Azul", stock: 8 },
-        { nombre: "Dorado", stock: 5 },
-      ],
-    },
-    {
-      nombre: "Tomatodos de Vidrio",
-      categoria: "Tomatodos",
-      precio: 120,
-      descripcion: "Tomatodo de vidrio resistente, listo para grabado láser.",
-      imageUrl: "https://placehold.co/400x400/1E1E1E/F5C518?text=Tomatodo",
-      variantes: [
-        { nombre: "Transparente", stock: 15 },
-        { nombre: "Translúcido", stock: 10 },
-      ],
-    },
-    {
-      nombre: "Agenda Ejecutiva",
-      categoria: "Agendas",
-      precio: 85,
-      descripcion: "Agenda ejecutiva de cuero con grabado personalizado.",
-      imageUrl: "https://placehold.co/400x400/1E1E1E/F5C518?text=Agenda",
-      variantes: [
-        { nombre: "Negra", stock: 7 },
-        { nombre: "Marrón", stock: 5 },
-      ],
-    },
-  ];
-
-  productosSeed.forEach((p) => {
-    const productoRef = doc(collection(db, "productos"));
-    batch.set(productoRef, {
-      nombre: p.nombre,
-      categoria: p.categoria,
-      precio: p.precio,
-      descripcion: p.descripcion,
-      imageUrl: p.imageUrl,
+  buildCatalogoSeed().forEach((producto) => {
+    const ref = doc(db, "productos", producto.codigo);
+    batch.set(ref, {
+      ...producto,
       creadoEn: serverTimestamp(),
       actualizadoEn: serverTimestamp(),
-    });
-    p.variantes.forEach((v) => {
-      const varRef = doc(collection(productoRef, "variantes"));
-      batch.set(varRef, {
-        nombre: v.nombre,
-        stock: v.stock,
-        stockMinimo: 5,
-        imageUrl: "",
-        codigoBarras: "",
-      });
     });
   });
 

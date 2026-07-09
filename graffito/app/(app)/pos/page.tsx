@@ -7,89 +7,101 @@ import GrabadoOptions from "@/components/POS/GrabadoOptions";
 import POSCart from "@/components/POS/POSCart";
 import PaymentModal from "@/components/POS/PaymentModal";
 import { useProducts } from "@/hooks/useProducts";
+import { useCategories } from "@/hooks/useCategories";
 import { useAuth } from "@/hooks/useAuth";
 import { createVenta } from "@/lib/db";
-import type { CartItem, MetodoPago, ProductoConVariantes, Variante } from "@/lib/types";
+import { resizeGrabadoParaCantidad } from "@/lib/utils";
+import type { CartItem, GrabadoInfo, MetodoPago, Producto } from "@/lib/types";
 
 export default function POSPage() {
   const { productos, loading } = useProducts();
+  const { categorias } = useCategories();
   const { user } = useAuth();
 
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [metodoPago, setMetodoPago] = useState<MetodoPago>("Efectivo");
   const [cliente, setCliente] = useState("");
   const [showPayment, setShowPayment] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  function handleSelectProduct(
-    producto: ProductoConVariantes,
-    variante: Variante
-  ) {
-    const key = `${producto.id}-${variante.id}`;
+  function handleSelectProduct(producto: Producto, disponible: number) {
     setCart((prev) => {
-      const existing = prev.find((item) => item.key === key);
+      const existing = prev.find((item) => item.productoId === producto.id);
       if (existing) {
+        const cantidad = Math.min(existing.cantidad + 1, existing.stockDisponible);
         return prev.map((item) =>
-          item.key === key
+          item.productoId === producto.id
             ? {
                 ...item,
-                cantidad: Math.min(item.cantidad + 1, item.stockDisponible),
+                cantidad,
+                grabado: resizeGrabadoParaCantidad(item.grabado, cantidad),
               }
             : item
         );
       }
       const nuevo: CartItem = {
-        key,
         productoId: producto.id,
-        varianteId: variante.id,
-        nombreProducto: producto.nombre,
-        nombreVariante: variante.nombre,
+        codigo: producto.codigo,
+        nombre: producto.nombre,
+        categoria: producto.categoria,
         precioUnitario: producto.precio,
         cantidad: 1,
-        stockDisponible: variante.stock,
-        imageUrl: variante.imageUrl || producto.imageUrl,
-        grabado: false,
-        textoGrabado: "",
+        stockDisponible: disponible,
+        imageUrl: producto.imageUrl,
+        tipo: producto.tipo,
+        grabado: { modo: "ninguno" },
       };
       return [...prev, nuevo];
     });
-    setSelectedKey(key);
+    setSelectedId(producto.id);
+    toast.success(`${producto.nombre} agregado al carrito`, { duration: 2200 });
   }
 
-  function handleIncrement(key: string) {
+  function handleIncrement(productoId: string) {
     setCart((prev) =>
-      prev.map((item) =>
-        item.key === key
-          ? { ...item, cantidad: Math.min(item.cantidad + 1, item.stockDisponible) }
-          : item
-      )
+      prev.map((item) => {
+        if (item.productoId !== productoId) return item;
+        const cantidad = Math.min(item.cantidad + 1, item.stockDisponible);
+        return {
+          ...item,
+          cantidad,
+          grabado: resizeGrabadoParaCantidad(item.grabado, cantidad),
+        };
+      })
     );
   }
 
-  function handleDecrement(key: string) {
+  function handleDecrement(productoId: string) {
     setCart((prev) => {
-      const target = prev.find((item) => item.key === key);
+      const target = prev.find((item) => item.productoId === productoId);
       if (!target) return prev;
       if (target.cantidad <= 1) {
-        return prev.filter((item) => item.key !== key);
+        return prev.filter((item) => item.productoId !== productoId);
       }
+      const cantidad = target.cantidad - 1;
       return prev.map((item) =>
-        item.key === key ? { ...item, cantidad: item.cantidad - 1 } : item
+        item.productoId === productoId
+          ? {
+              ...item,
+              cantidad,
+              grabado: resizeGrabadoParaCantidad(item.grabado, cantidad),
+            }
+          : item
       );
     });
   }
 
-  function handleRemove(key: string) {
-    setCart((prev) => prev.filter((item) => item.key !== key));
-    setSelectedKey((current) => (current === key ? null : current));
+  function handleRemove(productoId: string) {
+    setCart((prev) => prev.filter((item) => item.productoId !== productoId));
+    setSelectedId((current) => (current === productoId ? null : current));
   }
 
-  function handleGrabadoChange(grabado: boolean, textoGrabado: string) {
-    if (!selectedKey) return;
+  function handleGrabadoChange(grabado: GrabadoInfo) {
+    if (!selectedId) return;
     setCart((prev) =>
       prev.map((item) =>
-        item.key === selectedKey ? { ...item, grabado, textoGrabado } : item
+        item.productoId === selectedId ? { ...item, grabado } : item
       )
     );
   }
@@ -101,13 +113,8 @@ export default function POSPage() {
       await createVenta({
         items: cart.map((item) => ({
           productoId: item.productoId,
-          varianteId: item.varianteId,
-          nombreProducto: item.nombreProducto,
-          nombreVariante: item.nombreVariante,
           cantidad: item.cantidad,
-          precioUnitario: item.precioUnitario,
           grabado: item.grabado,
-          textoGrabado: item.textoGrabado,
         })),
         metodoPago,
         cliente,
@@ -115,7 +122,7 @@ export default function POSPage() {
       });
       toast.success("Venta registrada correctamente");
       setCart([]);
-      setSelectedKey(null);
+      setSelectedId(null);
       setCliente("");
       setMetodoPago("Efectivo");
       setShowPayment(false);
@@ -128,25 +135,30 @@ export default function POSPage() {
     }
   }
 
-  const selectedItem = cart.find((item) => item.key === selectedKey) ?? null;
+  const selectedItem = cart.find((item) => item.productoId === selectedId) ?? null;
 
   return (
     <div className="flex flex-col gap-4 xl:h-[calc(100vh-7rem)] xl:grid xl:grid-cols-[1.4fr_1fr_1fr]">
       <div className="min-h-[420px] xl:min-h-0">
         <ProductSearcher
           productos={productos}
+          categorias={categorias}
           loading={loading}
           onSelect={handleSelectProduct}
         />
       </div>
       <div className="min-h-[280px] xl:min-h-0">
-        <GrabadoOptions item={selectedItem} onChange={handleGrabadoChange} />
+        <GrabadoOptions
+          key={selectedItem?.productoId ?? "none"}
+          item={selectedItem}
+          onChange={handleGrabadoChange}
+        />
       </div>
       <div className="min-h-[420px] xl:min-h-0">
         <POSCart
           items={cart}
-          selectedKey={selectedKey}
-          onSelect={setSelectedKey}
+          selectedId={selectedId}
+          onSelect={setSelectedId}
           onIncrement={handleIncrement}
           onDecrement={handleDecrement}
           onRemove={handleRemove}

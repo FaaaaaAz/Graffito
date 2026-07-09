@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, Search } from "lucide-react";
+import { Bell } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 
 export default function Topbar({ title }: { title?: string }) {
@@ -16,15 +16,6 @@ export default function Topbar({ title }: { title?: string }) {
       </div>
 
       <div className="flex items-center gap-3">
-        <div className="relative hidden sm:block">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-soft" />
-          <input
-            type="text"
-            placeholder="Buscar..."
-            className="w-56 rounded-lg border border-panel-2 bg-panel py-2 pl-9 pr-3 text-sm text-ink placeholder:text-ink-soft focus:border-accent focus:outline-none"
-          />
-        </div>
-
         <button
           type="button"
           aria-label="Notificaciones"

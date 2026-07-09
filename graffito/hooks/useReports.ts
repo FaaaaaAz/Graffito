@@ -54,10 +54,10 @@ export function useReports(rango: RangoFechas) {
     const map = new Map<string, TopItem>();
     ventas.forEach((venta) => {
       venta.items.forEach((item) => {
-        const key = `${item.nombreProducto} · ${item.nombreVariante}`;
+        const key = item.nombre;
         const current = map.get(key) ?? { nombre: key, cantidad: 0, total: 0 };
         current.cantidad += item.cantidad;
-        current.total += item.precioUnitario * item.cantidad;
+        current.total += item.subtotal;
         map.set(key, current);
       });
     });
@@ -71,10 +71,7 @@ export function useReports(rango: RangoFechas) {
     ventas.forEach((venta) => {
       venta.items.forEach((item) => {
         const categoria = categoriaPorProducto[item.productoId] ?? "Otros";
-        map.set(
-          categoria,
-          (map.get(categoria) ?? 0) + item.precioUnitario * item.cantidad
-        );
+        map.set(categoria, (map.get(categoria) ?? 0) + item.subtotal);
       });
     });
     return Array.from(map.entries())

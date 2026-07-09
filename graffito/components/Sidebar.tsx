@@ -10,7 +10,6 @@ import {
   FileText,
   BarChart3,
   Settings,
-  Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -29,18 +28,16 @@ export default function Sidebar() {
 
   return (
     <aside className="fixed inset-y-0 left-0 hidden w-64 flex-col border-r border-panel-2 bg-canvas-soft lg:flex">
-      <div className="flex items-center gap-2 px-6 py-6">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent">
-          <Zap className="h-5 w-5 text-canvas" strokeWidth={2.5} />
-        </div>
-        <div>
-          <p className="text-lg font-semibold leading-tight text-ink">
-            Graffito
-          </p>
-          <p className="text-xs leading-tight text-ink-soft">
-            Centro de operaciones
-          </p>
-        </div>
+      <div className="flex flex-col items-center gap-1 px-4 py-5">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/images/graffitoLogo.png"
+          alt="Graffito"
+          className="h-auto w-36 object-contain drop-shadow-[0_0_3px_rgba(243,244,246,0.85)]"
+        />
+        <p className="text-xs leading-tight text-ink-soft">
+          Centro de operaciones
+        </p>
       </div>
 
       <nav className="flex-1 space-y-1 px-3 py-2">

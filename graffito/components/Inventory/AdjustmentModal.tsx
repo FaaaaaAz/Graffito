@@ -2,9 +2,8 @@
 
 import { useState } from "react";
 import { X } from "lucide-react";
-import type { StockRow } from "@/hooks/useInventory";
 import { cn } from "@/lib/utils";
-import type { TipoMovimiento } from "@/lib/types";
+import type { Producto, TipoMovimiento } from "@/lib/types";
 
 const MOTIVOS_SALIDA: Array<{ value: TipoMovimiento; label: string }> = [
   { value: "ajuste", label: "Ajuste de inventario" },
@@ -12,13 +11,13 @@ const MOTIVOS_SALIDA: Array<{ value: TipoMovimiento; label: string }> = [
 ];
 
 export default function AdjustmentModal({
-  row,
+  producto,
   mode,
   submitting,
   onClose,
   onSubmit,
 }: {
-  row: StockRow;
+  producto: Producto;
   mode: "entrada" | "salida";
   submitting: boolean;
   onClose: () => void;
@@ -29,7 +28,7 @@ export default function AdjustmentModal({
   const [notas, setNotas] = useState("");
 
   const isEntrada = mode === "entrada";
-  const maxSalida = row.variante.stock;
+  const maxSalida = producto.stock;
 
   function handleSubmit() {
     if (cantidad <= 0) return;
@@ -54,9 +53,9 @@ export default function AdjustmentModal({
         </div>
 
         <div className="mb-4 rounded-lg border border-panel-2 bg-canvas-soft p-3">
-          <p className="text-sm font-medium text-ink">{row.producto.nombre}</p>
+          <p className="text-sm font-medium text-ink">{producto.nombre}</p>
           <p className="text-xs text-ink-soft">
-            {row.variante.nombre} · Stock actual: {row.variante.stock}
+            {producto.codigo} · Stock actual: {producto.stock}
           </p>
         </div>
 

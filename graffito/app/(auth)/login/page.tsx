@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { Zap, Eye, EyeOff, LogIn } from "lucide-react";
+import { Eye, EyeOff, LogIn } from "lucide-react";
 import toast from "react-hot-toast";
 import { login, authErrorMessage } from "@/lib/auth";
 import { useAuth } from "@/hooks/useAuth";
@@ -52,14 +52,14 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-canvas px-4">
       <div className="w-full max-w-sm">
-        <div className="mb-8 flex flex-col items-center gap-3 text-center">
-          <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-accent shadow-md">
-            <Zap className="h-7 w-7 text-canvas" strokeWidth={2.5} />
-          </div>
-          <div>
-            <h1 className="text-2xl font-semibold text-ink">Graffito</h1>
-            <p className="text-sm text-ink-soft">Centro de operaciones</p>
-          </div>
+        <div className="mb-6 flex flex-col items-center gap-2 text-center">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/images/graffitoLogo.png"
+            alt="Graffito"
+            className="h-48 w-auto object-contain drop-shadow-[0_0_3px_rgba(243,244,246,0.85)]"
+          />
+          <p className="text-sm text-ink-soft">Centro de operaciones</p>
         </div>
 
         <form

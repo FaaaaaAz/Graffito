@@ -1,6 +1,6 @@
 "use client";
 
-import { Pencil, Trash2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Pencil, Trash2 } from "lucide-react";
 import type { Producto } from "@/lib/types";
 import {
   cn,
@@ -10,39 +10,87 @@ import {
   stockStatusLabel,
 } from "@/lib/utils";
 
-export default function ProductGrid({
-  productos,
+function ComponentRow({
+  label,
+  producto,
+}: {
+  label: string;
+  producto: Producto | undefined;
+}) {
+  if (!producto) {
+    return (
+      <div className="flex items-center justify-between text-xs">
+        <span className="text-ink-soft">{label}</span>
+        <span className="flex items-center gap-1 font-medium text-red-400">
+          <AlertTriangle className="h-3 w-3" />
+          No encontrado
+        </span>
+      </div>
+    );
+  }
+
+  const status = stockStatus(producto.stock, producto.stockMinimo);
+  const ok = status === "en-stock";
+
+  return (
+    <div className="flex items-center justify-between text-xs">
+      <span className="truncate text-ink-soft">
+        {label}: {producto.nombre}
+      </span>
+      <span
+        className={cn(
+          "flex shrink-0 items-center gap-1 font-medium",
+          ok ? "text-emerald-400" : "text-red-400"
+        )}
+      >
+        {ok ? (
+          <CheckCircle2 className="h-3 w-3" />
+        ) : (
+          <AlertTriangle className="h-3 w-3" />
+        )}
+        {producto.stock} u.
+      </span>
+    </div>
+  );
+}
+
+export default function ComboGrid({
+  combos,
+  productosPorCodigo,
   onEdit,
   onDelete,
 }: {
-  productos: Producto[];
+  combos: Producto[];
+  productosPorCodigo: Map<string, Producto>;
   onEdit: (producto: Producto) => void;
   onDelete: (producto: Producto) => void;
 }) {
-  if (productos.length === 0) {
+  if (combos.length === 0) {
     return (
       <p className="py-16 text-center text-sm text-ink-soft">
-        No se encontraron productos.
+        No se encontraron combos.
       </p>
     );
   }
 
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-      {productos.map((producto) => {
-        const status = stockStatus(producto.stock, producto.stockMinimo);
+      {combos.map((combo) => {
+        const status = stockStatus(combo.stock, combo.stockMinimo);
+        const agenda = combo.itemsBase?.find((i) => i.tipoProducto === "agenda");
+        const boligrafo = combo.itemsBase?.find((i) => i.tipoProducto === "muller");
 
         return (
           <div
-            key={producto.id}
+            key={combo.id}
             className="flex flex-col overflow-hidden rounded-xl border border-panel-2 bg-panel shadow-sm transition-all duration-300 hover:border-panel-2/60"
           >
             <div className="relative aspect-square w-full bg-panel-2">
-              {producto.imageUrl ? (
+              {combo.imageUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
-                  src={producto.imageUrl}
-                  alt={producto.nombre}
+                  src={combo.imageUrl}
+                  alt={combo.nombre}
                   className="h-full w-full object-cover"
                 />
               ) : (
@@ -62,25 +110,42 @@ export default function ProductGrid({
 
             <div className="flex flex-1 flex-col p-4">
               <p className="truncate text-[10px] font-medium uppercase tracking-wide text-ink-soft">
-                {producto.codigo}
+                {combo.codigo}
               </p>
               <p className="truncate text-sm font-semibold text-ink">
-                {producto.nombre}
+                {combo.nombre}
               </p>
-              <p className="text-xs text-ink-soft">{producto.categoria}</p>
               <div className="mt-2 flex items-center justify-between">
                 <span className="text-base font-semibold text-gold">
-                  {formatCurrency(producto.precio)}
+                  {formatCurrency(combo.precio)}
                 </span>
                 <span className="text-xs text-ink-soft">
-                  {producto.stock} u.
+                  Stock: {combo.stock} u.
                 </span>
+              </div>
+
+              <div className="mt-3 space-y-1.5 rounded-lg bg-canvas-soft p-2.5">
+                <p className="text-[10px] font-medium uppercase tracking-wide text-ink-soft">
+                  Componentes
+                </p>
+                <ComponentRow
+                  label="Agenda"
+                  producto={
+                    agenda ? productosPorCodigo.get(agenda.codigo) : undefined
+                  }
+                />
+                <ComponentRow
+                  label="Bolígrafo"
+                  producto={
+                    boligrafo ? productosPorCodigo.get(boligrafo.codigo) : undefined
+                  }
+                />
               </div>
 
               <div className="mt-3 flex gap-2 border-t border-panel-2 pt-3">
                 <button
                   type="button"
-                  onClick={() => onEdit(producto)}
+                  onClick={() => onEdit(combo)}
                   className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-panel-2 px-3 py-2 text-xs font-medium text-ink transition-all duration-300 hover:bg-panel-2/70"
                 >
                   <Pencil className="h-3.5 w-3.5" />
@@ -88,7 +153,7 @@ export default function ProductGrid({
                 </button>
                 <button
                   type="button"
-                  onClick={() => onDelete(producto)}
+                  onClick={() => onDelete(combo)}
                   className="flex items-center justify-center rounded-lg bg-panel-2 px-3 py-2 text-red-400 transition-all duration-300 hover:bg-red-500/10"
                 >
                   <Trash2 className="h-3.5 w-3.5" />

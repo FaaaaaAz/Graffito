@@ -2,7 +2,7 @@
 
 import { CheckCircle2, X } from "lucide-react";
 import type { CartItem, MetodoPago } from "@/lib/types";
-import { formatCurrency } from "@/lib/utils";
+import { describirGrabado, formatCurrency } from "@/lib/utils";
 
 export default function PaymentModal({
   items,
@@ -41,23 +41,24 @@ export default function PaymentModal({
         </div>
 
         <div className="max-h-64 space-y-2 overflow-y-auto rounded-lg border border-panel-2 bg-canvas-soft p-3">
-          {items.map((item) => (
-            <div key={item.key} className="flex items-start justify-between gap-2 text-sm">
-              <div className="min-w-0">
-                <p className="truncate text-ink">
-                  {item.cantidad}x {item.nombreProducto} ({item.nombreVariante})
-                </p>
-                {item.grabado && (
-                  <p className="truncate text-xs text-ink-soft">
-                    Grabado: &ldquo;{item.textoGrabado || "-"}&rdquo;
+          {items.map((item) => {
+            const grabadoTexto = describirGrabado(item.grabado);
+            return (
+              <div key={item.productoId} className="flex items-start justify-between gap-2 text-sm">
+                <div className="min-w-0">
+                  <p className="truncate text-ink">
+                    {item.cantidad}x {item.nombre}
                   </p>
-                )}
+                  {grabadoTexto && (
+                    <p className="truncate text-xs text-ink-soft">{grabadoTexto}</p>
+                  )}
+                </div>
+                <span className="shrink-0 font-medium text-ink">
+                  {formatCurrency(item.precioUnitario * item.cantidad)}
+                </span>
               </div>
-              <span className="shrink-0 font-medium text-ink">
-                {formatCurrency(item.precioUnitario * item.cantidad)}
-              </span>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         <div className="mt-3 space-y-1 text-sm text-ink-soft">

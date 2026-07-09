@@ -197,10 +197,11 @@ export function TopProductsBarChart({
           type="category"
           dataKey="nombre"
           stroke={AXIS_COLOR}
-          tick={{ fill: AXIS_COLOR, fontSize: 12 }}
+          tick={{ fill: AXIS_COLOR, fontSize: 11 }}
           axisLine={false}
           tickLine={false}
-          width={110}
+          width={130}
+          interval={0}
         />
         <Tooltip content={<ChartTooltip />} />
         <Bar

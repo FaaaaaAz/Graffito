@@ -61,7 +61,7 @@ export default function MovementHistory({
                 >
                   <div className="min-w-0">
                     <p className="truncate text-ink">
-                      {mov.nombreProducto} · {mov.nombreVariante}
+                      {mov.nombre} · {mov.codigo}
                     </p>
                     <p className="text-xs text-ink-soft">
                       {formatDateTime(mov.fecha)} · Administrador

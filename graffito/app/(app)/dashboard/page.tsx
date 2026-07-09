@@ -16,7 +16,7 @@ import {
 import { useSales } from "@/hooks/useSales";
 import { useReports } from "@/hooks/useReports";
 import { useInventory } from "@/hooks/useInventory";
-import { formatCurrency, stockStatus } from "@/lib/utils";
+import { formatCurrency, stockStatus, truncateText } from "@/lib/utils";
 import Loading from "@/components/Common/Loading";
 
 function useDayRange() {
@@ -51,11 +51,12 @@ export default function DashboardPage() {
     topProductos,
     loading: loadingReportes,
   } = useReports(ultimos7Dias);
-  const { stockRows, movimientos, loading: loadingInventario } =
+  const { productos, movimientos, loading: loadingInventario } =
     useInventory(10);
+  const productosSimples = productos.filter((p) => p.tipo !== "combo");
 
-  const alertasStock = stockRows.filter(
-    (row) => stockStatus(row.variante.stock, row.variante.stockMinimo) !== "en-stock"
+  const alertasStock = productosSimples.filter(
+    (p) => stockStatus(p.stock, p.stockMinimo) !== "en-stock"
   );
 
   const loading = loadingHoy || loadingReportes || loadingInventario;
@@ -89,7 +90,7 @@ export default function DashboardPage() {
           icon={AlertTriangle}
           label="Stock con alerta"
           value={`${alertasStock.length}`}
-          hint="Variantes bajo el mínimo"
+          hint="Productos bajo el mínimo"
           accent={alertasStock.length > 0 ? "danger" : "default"}
         />
       </div>
@@ -121,7 +122,7 @@ export default function DashboardPage() {
           </h3>
           <TopProductsBarChart
             data={topProductos.map((p) => ({
-              nombre: p.nombre,
+              nombre: truncateText(p.nombre, 16),
               cantidad: p.cantidad,
             }))}
           />
@@ -132,7 +133,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <CriticalStockAlerts rows={stockRows} />
+      <CriticalStockAlerts productos={productosSimples} />
     </div>
   );
 }

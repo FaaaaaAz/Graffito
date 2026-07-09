@@ -6,17 +6,17 @@ import StockTable from "@/components/Inventory/StockTable";
 import AdjustmentModal from "@/components/Inventory/AdjustmentModal";
 import MovementHistory from "@/components/Inventory/MovementHistory";
 import Loading from "@/components/Common/Loading";
-import { useInventory, type StockRow } from "@/hooks/useInventory";
+import { useInventory } from "@/hooks/useInventory";
 import { useAuth } from "@/hooks/useAuth";
 import { adjustStock } from "@/lib/db";
-import type { TipoMovimiento } from "@/lib/types";
+import type { Producto, TipoMovimiento } from "@/lib/types";
 
 export default function InventoryPage() {
-  const { stockRows, movimientos, loading } = useInventory(20);
+  const { productos, movimientos, loading } = useInventory(20);
   const { user } = useAuth();
 
   const [adjusting, setAdjusting] = useState<{
-    row: StockRow;
+    producto: Producto;
     mode: "entrada" | "salida";
   } | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -31,10 +31,8 @@ export default function InventoryPage() {
     try {
       const delta = adjusting.mode === "entrada" ? cantidad : -cantidad;
       await adjustStock({
-        productoId: adjusting.row.producto.id,
-        varianteId: adjusting.row.variante.id,
-        nombreProducto: adjusting.row.producto.nombre,
-        nombreVariante: adjusting.row.variante.nombre,
+        productoId: adjusting.producto.id,
+        nombre: adjusting.producto.nombre,
         delta,
         tipo,
         notas,
@@ -53,19 +51,21 @@ export default function InventoryPage() {
 
   if (loading) return <Loading label="Cargando inventario..." />;
 
+  const productosSimples = productos.filter((p) => p.tipo !== "combo");
+
   return (
     <div className="space-y-5">
       <StockTable
-        rows={stockRows}
-        onRequestIncrease={(row) => setAdjusting({ row, mode: "entrada" })}
-        onRequestDecrease={(row) => setAdjusting({ row, mode: "salida" })}
+        productos={productosSimples}
+        onRequestIncrease={(producto) => setAdjusting({ producto, mode: "entrada" })}
+        onRequestDecrease={(producto) => setAdjusting({ producto, mode: "salida" })}
       />
 
       <MovementHistory movimientos={movimientos} />
 
       {adjusting && (
         <AdjustmentModal
-          row={adjusting.row}
+          producto={adjusting.producto}
           mode={adjusting.mode}
           submitting={submitting}
           onClose={() => setAdjusting(null)}

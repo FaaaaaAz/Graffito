@@ -39,11 +39,6 @@ export default function CompanyInfo({
           onChange={(v) => setForm({ ...form, nombreEmpresa: v })}
         />
         <Field
-          label="Logo (URL)"
-          value={form.logoUrl}
-          onChange={(v) => setForm({ ...form, logoUrl: v })}
-        />
-        <Field
           label="Teléfono"
           value={form.telefono}
           onChange={(v) => setForm({ ...form, telefono: v })}
@@ -74,7 +69,7 @@ export default function CompanyInfo({
             className="w-full rounded-lg border border-panel-2 bg-canvas-soft px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none"
           />
           <p className="mt-1 text-xs text-ink-soft">
-            Valor por defecto para productos nuevos sin variantes definidas.
+            Valor por defecto para productos nuevos.
           </p>
         </div>
       </div>

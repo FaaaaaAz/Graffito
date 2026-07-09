@@ -1,5 +1,84 @@
 import type { Timestamp } from "firebase/firestore";
-import type { EstadoStock, Variante, Venta } from "./types";
+import type { EstadoStock, GrabadoInfo, Producto, Venta } from "./types";
+
+export type GrabadoElegibilidad = "ninguno" | "simple" | "combo";
+
+/** Tomatodos and refills are never engraved; combos get a dual agenda+pen engraving; everything else is simple. */
+const CATEGORIAS_SIN_GRABADO = new Set(["Tomatodos", "Refills"]);
+
+export function grabadoElegibilidad(producto: {
+  categoria: string;
+  tipo?: "combo";
+}): GrabadoElegibilidad {
+  if (producto.tipo === "combo") return "combo";
+  if (CATEGORIAS_SIN_GRABADO.has(producto.categoria)) return "ninguno";
+  return "simple";
+}
+
+export function tieneGrabado(grabado: GrabadoInfo): boolean {
+  return grabado.modo !== "ninguno";
+}
+
+/** Human-readable one-liner for a receipt/summary; `null` when there's nothing to show. */
+export function describirGrabado(grabado: GrabadoInfo): string | null {
+  switch (grabado.modo) {
+    case "ninguno":
+      return null;
+    case "unico":
+      return `Grabado: "${grabado.texto || "-"}"`;
+    case "individual":
+      return `Grabados: ${grabado.textos
+        .map((texto, index) => `${index + 1}) "${texto || "-"}"`)
+        .join(", ")}`;
+    case "combo": {
+      const partes: string[] = [];
+      if (grabado.agenda !== undefined) partes.push(`Agenda: "${grabado.agenda || "-"}"`);
+      if (grabado.boligrafo !== undefined)
+        partes.push(`Bolígrafo: "${grabado.boligrafo || "-"}"`);
+      return partes.length > 0 ? partes.join(" · ") : null;
+    }
+  }
+}
+
+/** Keeps an "individual" engraving list in sync with a line's quantity. */
+export function resizeGrabadoParaCantidad(
+  grabado: GrabadoInfo,
+  cantidad: number
+): GrabadoInfo {
+  if (grabado.modo !== "individual") return grabado;
+  const textos = grabado.textos.slice(0, cantidad);
+  while (textos.length < cantidad) textos.push("");
+  return { modo: "individual", textos };
+}
+
+export function truncateText(text: string, maxLength: number): string {
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, maxLength - 1).trimEnd()}…`;
+}
+
+export function productosPorCodigo(productos: Producto[]): Map<string, Producto> {
+  return new Map(productos.map((p) => [p.codigo, p]));
+}
+
+/**
+ * A combo's own `stock` field is a separate manual counter (see lib/db.ts) —
+ * what actually gates whether it can be sold is the stock of its base
+ * products (agenda + pen), since selling a combo only decrements those.
+ */
+export function stockDisponible(
+  producto: Producto,
+  porCodigo: Map<string, Producto>
+): number {
+  if (producto.tipo !== "combo" || !producto.itemsBase?.length) {
+    return producto.stock;
+  }
+  return Math.min(
+    ...producto.itemsBase.map((base) => {
+      const stockBase = porCodigo.get(base.codigo)?.stock ?? 0;
+      return Math.floor(stockBase / base.cantidad);
+    })
+  );
+}
 
 export function cn(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -66,7 +145,7 @@ export function stockStatusLabel(status: EstadoStock): string {
     case "en-stock":
       return "En stock";
     case "bajo":
-      return "Bajo stock";
+      return "Crítico";
     case "agotado":
       return "Agotado";
   }
@@ -81,20 +160,6 @@ export function stockStatusClasses(status: EstadoStock): string {
     case "agotado":
       return "bg-red-500/15 text-red-400 border-red-500/30";
   }
-}
-
-export function totalStock(variantes: Variante[]): number {
-  return variantes.reduce((sum, v) => sum + v.stock, 0);
-}
-
-export function productStockStatus(variantes: Variante[]): EstadoStock {
-  if (variantes.length === 0) return "agotado";
-  const total = totalStock(variantes);
-  if (total <= 0) return "agotado";
-  const anyBajo = variantes.some(
-    (v) => stockStatus(v.stock, v.stockMinimo) !== "en-stock"
-  );
-  return anyBajo ? "bajo" : "en-stock";
 }
 
 export function computeVentasStats(ventas: Venta[]) {
@@ -119,8 +184,8 @@ export function ventasToCSV(ventas: Venta[]): string {
     "Fecha",
     "Cliente",
     "Metodo de pago",
+    "Codigo",
     "Producto",
-    "Variante",
     "Cantidad",
     "Precio unitario",
     "Grabado",
@@ -132,18 +197,19 @@ export function ventasToCSV(ventas: Venta[]): string {
   ventas.forEach((venta) => {
     const fecha = venta.fecha ? formatDateTime(venta.fecha) : "";
     venta.items.forEach((item) => {
+      const grabadoTexto = describirGrabado(item.grabado);
       rows.push(
         [
           fecha,
           venta.cliente ?? "",
           venta.metodoPago,
-          item.nombreProducto,
-          item.nombreVariante,
+          item.codigo,
+          item.nombre,
           item.cantidad,
           item.precioUnitario,
-          item.grabado ? "Si" : "No",
-          item.textoGrabado ?? "",
-          (item.precioUnitario * item.cantidad).toFixed(2),
+          grabadoTexto ? "Si" : "No",
+          grabadoTexto ?? "",
+          item.subtotal.toFixed(2),
         ]
           .map(csvCell)
           .join(",")

@@ -1,14 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { subscribeMovimientos } from "@/lib/db";
 import { useProducts } from "@/hooks/useProducts";
-import type { MovimientoStock, Producto, Variante } from "@/lib/types";
-
-export interface StockRow {
-  producto: Producto;
-  variante: Variante;
-}
+import type { MovimientoStock } from "@/lib/types";
 
 export function useInventory(movimientosLimit = 20) {
   const { productos, loading: loadingProductos } = useProducts();
@@ -23,16 +18,8 @@ export function useInventory(movimientosLimit = 20) {
     return unsubscribe;
   }, [movimientosLimit]);
 
-  const stockRows: StockRow[] = useMemo(
-    () =>
-      productos.flatMap((producto) =>
-        producto.variantes.map((variante) => ({ producto, variante }))
-      ),
-    [productos]
-  );
-
   return {
-    stockRows,
+    productos,
     movimientos,
     loading: loadingProductos || loadingMovimientos,
   };

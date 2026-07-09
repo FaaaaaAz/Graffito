@@ -4,6 +4,7 @@ import {
   TopProductsBarChart,
 } from "@/components/Dashboard/Charts";
 import type { CategoriaVentas, TopItem, VentasPorDia } from "@/hooks/useReports";
+import { truncateText } from "@/lib/utils";
 
 function Card({
   title,
@@ -43,11 +44,11 @@ export default function ReportCharts({
       <Card title="Categoría más vendida">
         <CategoryDonutChart data={ventasPorCategoria} />
       </Card>
-      <Card title="Producto / variante más vendida (top 3)">
+      <Card title="Producto más vendido (top 3)">
         <TopProductsBarChart
           data={topProductos
             .slice(0, 3)
-            .map((p) => ({ nombre: p.nombre, cantidad: p.cantidad }))}
+            .map((p) => ({ nombre: truncateText(p.nombre, 16), cantidad: p.cantidad }))}
         />
       </Card>
     </div>

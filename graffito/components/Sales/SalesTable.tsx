@@ -3,7 +3,7 @@
 import { Fragment, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import type { Venta } from "@/lib/types";
-import { cn, formatCurrency, formatDateTime } from "@/lib/utils";
+import { cn, describirGrabado, formatCurrency, formatDateTime } from "@/lib/utils";
 
 export default function SalesTable({ ventas }: { ventas: Venta[] }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -44,7 +44,7 @@ export default function SalesTable({ ventas }: { ventas: Venta[] }) {
                     {formatDateTime(venta.fecha)}
                   </td>
                   <td className="max-w-xs truncate px-4 py-3 text-ink">
-                    {venta.items.map((i) => i.nombreProducto).join(", ")}
+                    {venta.items.map((i) => i.nombre).join(", ")}
                   </td>
                   <td className="px-4 py-3 text-ink">{cantidadTotal}</td>
                   <td className="px-4 py-3 text-ink-soft">{venta.metodoPago}</td>
@@ -67,25 +67,27 @@ export default function SalesTable({ ventas }: { ventas: Venta[] }) {
                   <tr className="border-b border-panel-2 bg-canvas-soft last:border-0">
                     <td colSpan={7} className="px-4 py-3">
                       <ul className="space-y-1.5">
-                        {venta.items.map((item, index) => (
-                          <li
-                            key={index}
-                            className="flex flex-wrap items-center justify-between gap-2 text-xs"
-                          >
-                            <span className="text-ink">
-                              {item.cantidad}x {item.nombreProducto} (
-                              {item.nombreVariante})
-                              {item.grabado && (
-                                <span className="ml-2 rounded bg-accent/15 px-1.5 py-0.5 font-medium text-accent">
-                                  Grabado: &ldquo;{item.textoGrabado || "-"}&rdquo;
-                                </span>
-                              )}
-                            </span>
-                            <span className="font-medium text-ink-soft">
-                              {formatCurrency(item.precioUnitario * item.cantidad)}
-                            </span>
-                          </li>
-                        ))}
+                        {venta.items.map((item, index) => {
+                          const grabadoTexto = describirGrabado(item.grabado);
+                          return (
+                            <li
+                              key={index}
+                              className="flex flex-wrap items-center justify-between gap-2 text-xs"
+                            >
+                              <span className="text-ink">
+                                {item.cantidad}x {item.nombre} ({item.codigo})
+                                {grabadoTexto && (
+                                  <span className="ml-2 rounded bg-accent/15 px-1.5 py-0.5 font-medium text-accent">
+                                    {grabadoTexto}
+                                  </span>
+                                )}
+                              </span>
+                              <span className="font-medium text-ink-soft">
+                                {formatCurrency(item.subtotal)}
+                              </span>
+                            </li>
+                          );
+                        })}
                       </ul>
                     </td>
                   </tr>

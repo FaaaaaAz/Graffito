@@ -1,19 +1,40 @@
-import { AlertTriangle, ArrowDownCircle, ArrowUpCircle, Receipt } from "lucide-react";
-import type { MovimientoStock, Venta } from "@/lib/types";
-import type { StockRow } from "@/hooks/useInventory";
+import Link from "next/link";
+import {
+  AlertTriangle,
+  ArrowDownCircle,
+  ArrowUpCircle,
+  ChevronRight,
+  Receipt,
+} from "lucide-react";
+import type { MovimientoStock, Producto, Venta } from "@/lib/types";
 import { formatCurrency, formatTime, stockStatus } from "@/lib/utils";
+
+const LIMITE = 5;
 
 function Panel({
   title,
+  verMasHref,
+  mostrarVerMas,
   children,
 }: {
   title: string;
+  verMasHref?: string;
+  mostrarVerMas?: boolean;
   children: React.ReactNode;
 }) {
   return (
     <div className="rounded-xl border border-panel-2 bg-panel p-5 shadow-sm">
       <h3 className="mb-4 text-sm font-semibold text-ink">{title}</h3>
       {children}
+      {mostrarVerMas && verMasHref && (
+        <Link
+          href={verMasHref}
+          className="mt-4 flex items-center justify-center gap-1 rounded-lg border border-panel-2 py-2 text-xs font-medium text-gold transition-all duration-300 hover:border-gold/40 hover:bg-gold/5"
+        >
+          Ver más
+          <ChevronRight className="h-3.5 w-3.5" />
+        </Link>
+      )}
     </div>
   );
 }
@@ -23,9 +44,13 @@ function Empty({ label }: { label: string }) {
 }
 
 export function RecentSales({ ventas }: { ventas: Venta[] }) {
-  const items = ventas.slice(0, 10);
+  const items = ventas.slice(0, LIMITE);
   return (
-    <Panel title="Últimas ventas">
+    <Panel
+      title="Últimas ventas"
+      verMasHref="/sales"
+      mostrarVerMas={ventas.length > LIMITE}
+    >
       {items.length === 0 ? (
         <Empty label="Aún no hay ventas registradas hoy." />
       ) : (
@@ -38,7 +63,7 @@ export function RecentSales({ ventas }: { ventas: Venta[] }) {
                 </div>
                 <div className="min-w-0">
                   <p className="truncate text-sm text-ink">
-                    {venta.items.map((i) => i.nombreProducto).join(", ")}
+                    {venta.items.map((i) => i.nombre).join(", ")}
                   </p>
                   <p className="text-xs text-ink-soft">
                     {venta.items.reduce((s, i) => s + i.cantidad, 0)} productos ·{" "}
@@ -62,9 +87,13 @@ export function RecentMovements({
 }: {
   movimientos: MovimientoStock[];
 }) {
-  const items = movimientos.slice(0, 10);
+  const items = movimientos.slice(0, LIMITE);
   return (
-    <Panel title="Movimientos de stock recientes">
+    <Panel
+      title="Movimientos de stock recientes"
+      verMasHref="/inventory"
+      mostrarVerMas={movimientos.length > LIMITE}
+    >
       {items.length === 0 ? (
         <Empty label="No hay movimientos recientes." />
       ) : (
@@ -81,7 +110,7 @@ export function RecentMovements({
                   )}
                   <div className="min-w-0">
                     <p className="truncate text-sm text-ink">
-                      {mov.nombreProducto} · {mov.nombreVariante}
+                      {mov.nombre} · {mov.codigo}
                     </p>
                     <p className="text-xs capitalize text-ink-soft">{mov.tipo}</p>
                   </div>
@@ -99,36 +128,41 @@ export function RecentMovements({
   );
 }
 
-export function CriticalStockAlerts({ rows }: { rows: StockRow[] }) {
-  const alertas = rows.filter(
-    (row) => stockStatus(row.variante.stock, row.variante.stockMinimo) !== "en-stock"
+export function CriticalStockAlerts({ productos }: { productos: Producto[] }) {
+  const alertas = productos.filter(
+    (p) => stockStatus(p.stock, p.stockMinimo) !== "en-stock"
   );
+  const items = alertas.slice(0, LIMITE);
 
   return (
-    <Panel title="Alertas de stock crítico">
-      {alertas.length === 0 ? (
+    <Panel
+      title="Alertas de stock crítico"
+      verMasHref="/inventory"
+      mostrarVerMas={alertas.length > LIMITE}
+    >
+      {items.length === 0 ? (
         <Empty label="Todo el inventario está en niveles saludables." />
       ) : (
         <ul className="space-y-3">
-          {alertas.slice(0, 10).map((row) => (
+          {items.map((producto) => (
             <li
-              key={`${row.producto.id}-${row.variante.id}`}
+              key={producto.id}
               className="flex items-center justify-between gap-3"
             >
               <div className="flex items-center gap-3 min-w-0">
                 <AlertTriangle
                   className={
-                    row.variante.stock <= 0
+                    producto.stock <= 0
                       ? "h-5 w-5 shrink-0 text-red-400"
                       : "h-5 w-5 shrink-0 text-accent"
                   }
                 />
                 <p className="truncate text-sm text-ink">
-                  {row.producto.nombre} · {row.variante.nombre}
+                  {producto.nombre} · {producto.codigo}
                 </p>
               </div>
               <span className="shrink-0 text-sm font-semibold text-ink-soft">
-                {row.variante.stock} u.
+                {producto.stock} u.
               </span>
             </li>
           ))}
