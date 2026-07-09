@@ -2,12 +2,13 @@
 
 import { CheckCircle2, X } from "lucide-react";
 import type { CartItem, MetodoPago } from "@/lib/types";
-import { describirGrabado, formatCurrency } from "@/lib/utils";
+import { formatCurrency, grabadoLineas } from "@/lib/utils";
 
 export default function PaymentModal({
   items,
   metodoPago,
   cliente,
+  celular,
   submitting,
   onClose,
   onConfirm,
@@ -15,6 +16,7 @@ export default function PaymentModal({
   items: CartItem[];
   metodoPago: MetodoPago;
   cliente: string;
+  celular: string;
   submitting: boolean;
   onClose: () => void;
   onConfirm: () => void;
@@ -42,16 +44,18 @@ export default function PaymentModal({
 
         <div className="max-h-64 space-y-2 overflow-y-auto rounded-lg border border-panel-2 bg-canvas-soft p-3">
           {items.map((item) => {
-            const grabadoTexto = describirGrabado(item.grabado);
+            const lineas = grabadoLineas(item.grabado);
             return (
               <div key={item.productoId} className="flex items-start justify-between gap-2 text-sm">
                 <div className="min-w-0">
                   <p className="truncate text-ink">
                     {item.cantidad}x {item.nombre}
                   </p>
-                  {grabadoTexto && (
-                    <p className="truncate text-xs text-ink-soft">{grabadoTexto}</p>
-                  )}
+                  {lineas.map((linea, index) => (
+                    <p key={index} className="truncate text-xs text-ink-soft">
+                      {linea.label}: &ldquo;{linea.value}&rdquo;
+                    </p>
+                  ))}
                 </div>
                 <span className="shrink-0 font-medium text-ink">
                   {formatCurrency(item.precioUnitario * item.cantidad)}
@@ -68,7 +72,11 @@ export default function PaymentModal({
           </div>
           <div className="flex justify-between">
             <span>Cliente</span>
-            <span className="text-ink">{cliente || "No registrado"}</span>
+            <span className="text-ink">{cliente}</span>
+          </div>
+          <div className="flex justify-between">
+            <span>Celular</span>
+            <span className="text-ink">{celular}</span>
           </div>
         </div>
 

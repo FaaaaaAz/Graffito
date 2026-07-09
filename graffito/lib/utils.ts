@@ -1,10 +1,17 @@
 import type { Timestamp } from "firebase/firestore";
-import type { EstadoStock, GrabadoInfo, Producto, Venta } from "./types";
+import type {
+  EstadoStock,
+  GrabadoInfo,
+  GrabadoTexto,
+  Producto,
+  Tipografia,
+  Venta,
+} from "./types";
 
 export type GrabadoElegibilidad = "ninguno" | "simple" | "combo";
 
-/** Tomatodos and refills are never engraved; combos get a dual agenda+pen engraving; everything else is simple. */
-const CATEGORIAS_SIN_GRABADO = new Set(["Tomatodos", "Refills"]);
+/** Only refills are never engraved; combos get a dual agenda+pen engraving; everything else (including tomatodos) is simple. */
+const CATEGORIAS_SIN_GRABADO = new Set(["Refills"]);
 
 export function grabadoElegibilidad(producto: {
   categoria: string;
@@ -19,23 +26,54 @@ export function tieneGrabado(grabado: GrabadoInfo): boolean {
   return grabado.modo !== "ninguno";
 }
 
-/** Human-readable one-liner for a receipt/summary; `null` when there's nothing to show. */
-export function describirGrabado(grabado: GrabadoInfo): string | null {
+export function grabadoTextoVacio(tipografia: Tipografia = "Graffito"): GrabadoTexto {
+  return { texto: "", tipografia };
+}
+
+const FONT_STACKS: Record<Tipografia, string> = {
+  Graffito: "Georgia, 'Times New Roman', serif",
+  Arial: "Arial, Helvetica, sans-serif",
+  Courier: "'Courier New', Courier, monospace",
+  "Comic Sans": "'Comic Sans MS', 'Comic Sans', cursive",
+  "Times New Roman": "'Times New Roman', Times, serif",
+  "Brush Script": "'Brush Script MT', 'Segoe Script', cursive",
+};
+
+export function tipografiaFontFamily(tipografia: Tipografia): string {
+  return FONT_STACKS[tipografia];
+}
+
+export interface GrabadoLinea {
+  label: string;
+  value: string;
+}
+
+/** Structured lines for a receipt/summary; `[]` when there's nothing engraved. */
+export function grabadoLineas(grabado: GrabadoInfo): GrabadoLinea[] {
   switch (grabado.modo) {
     case "ninguno":
-      return null;
+      return [];
     case "unico":
-      return `Grabado: "${grabado.texto || "-"}"`;
+      return [
+        { label: "Grabado", value: grabado.texto || "-" },
+        { label: "Tipografía", value: grabado.tipografia },
+      ];
     case "individual":
-      return `Grabados: ${grabado.textos
-        .map((texto, index) => `${index + 1}) "${texto || "-"}"`)
-        .join(", ")}`;
+      return grabado.unidades.flatMap((u, index) => [
+        { label: `Grabado unidad ${index + 1}`, value: u.texto || "-" },
+        { label: `Tipografía unidad ${index + 1}`, value: u.tipografia },
+      ]);
     case "combo": {
-      const partes: string[] = [];
-      if (grabado.agenda !== undefined) partes.push(`Agenda: "${grabado.agenda || "-"}"`);
-      if (grabado.boligrafo !== undefined)
-        partes.push(`Bolígrafo: "${grabado.boligrafo || "-"}"`);
-      return partes.length > 0 ? partes.join(" · ") : null;
+      const lineas: GrabadoLinea[] = [];
+      if (grabado.agenda) {
+        lineas.push({ label: "Grabado agenda", value: grabado.agenda.texto || "-" });
+        lineas.push({ label: "Tipografía agenda", value: grabado.agenda.tipografia });
+      }
+      if (grabado.boligrafo) {
+        lineas.push({ label: "Grabado bolígrafo", value: grabado.boligrafo.texto || "-" });
+        lineas.push({ label: "Tipografía bolígrafo", value: grabado.boligrafo.tipografia });
+      }
+      return lineas;
     }
   }
 }
@@ -46,9 +84,31 @@ export function resizeGrabadoParaCantidad(
   cantidad: number
 ): GrabadoInfo {
   if (grabado.modo !== "individual") return grabado;
-  const textos = grabado.textos.slice(0, cantidad);
-  while (textos.length < cantidad) textos.push("");
-  return { modo: "individual", textos };
+  const unidades = grabado.unidades.slice(0, cantidad);
+  while (unidades.length < cantidad) unidades.push(grabadoTextoVacio());
+  return { modo: "individual", unidades };
+}
+
+/**
+ * Defense-in-depth for the Firestore write boundary: Firestore rejects any
+ * field whose value is `undefined` (this is exactly what caused the combo
+ * engraving bug). The `GrabadoInfo` type no longer allows `undefined` to be
+ * constructed, but this recursively strips it anyway in case a caller builds
+ * a malformed object some other way.
+ */
+export function sanitizeForFirestore<T>(value: T): T {
+  if (value === undefined) return null as T;
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeForFirestore(item)) as T;
+  }
+  if (value !== null && typeof value === "object" && !(value instanceof Date)) {
+    const out: Record<string, unknown> = {};
+    for (const [key, val] of Object.entries(value)) {
+      out[key] = val === undefined ? null : sanitizeForFirestore(val);
+    }
+    return out as T;
+  }
+  return value;
 }
 
 export function truncateText(text: string, maxLength: number): string {
@@ -183,13 +243,13 @@ export function ventasToCSV(ventas: Venta[]): string {
   const header = [
     "Fecha",
     "Cliente",
+    "Celular",
     "Metodo de pago",
     "Codigo",
     "Producto",
     "Cantidad",
     "Precio unitario",
     "Grabado",
-    "Texto grabado",
     "Total linea",
   ];
   const rows = [header.map(csvCell).join(",")];
@@ -197,18 +257,19 @@ export function ventasToCSV(ventas: Venta[]): string {
   ventas.forEach((venta) => {
     const fecha = venta.fecha ? formatDateTime(venta.fecha) : "";
     venta.items.forEach((item) => {
-      const grabadoTexto = describirGrabado(item.grabado);
+      const lineas = grabadoLineas(item.grabado);
+      const grabadoResumen = lineas.map((l) => `${l.label}: ${l.value}`).join(" | ");
       rows.push(
         [
           fecha,
           venta.cliente ?? "",
+          venta.celular ?? "",
           venta.metodoPago,
           item.codigo,
           item.nombre,
           item.cantidad,
           item.precioUnitario,
-          grabadoTexto ? "Si" : "No",
-          grabadoTexto ?? "",
+          grabadoResumen,
           item.subtotal.toFixed(2),
         ]
           .map(csvCell)

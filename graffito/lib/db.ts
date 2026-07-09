@@ -20,6 +20,7 @@ import {
   type QueryDocumentSnapshot,
 } from "firebase/firestore";
 import { db } from "./firebase";
+import { sanitizeForFirestore } from "./utils";
 import type {
   Categoria,
   CierreDiario,
@@ -191,7 +192,8 @@ export interface NuevaVentaItemInput {
 export interface NuevaVentaInput {
   items: NuevaVentaItemInput[];
   metodoPago: MetodoPago;
-  cliente?: string;
+  cliente: string;
+  celular: string;
   usuarioId: string;
 }
 
@@ -284,11 +286,20 @@ export async function createVenta(input: NuevaVentaInput) {
 
     const total = ventaItems.reduce((sum, item) => sum + item.subtotal, 0);
 
+    // Firestore rejects `undefined` field values outright — the GrabadoInfo
+    // type no longer allows constructing one, but every item is sanitized
+    // again here as a last line of defense right at the write boundary.
+    const ventaItemsSaneados = ventaItems.map((item) => ({
+      ...item,
+      grabado: sanitizeForFirestore(item.grabado),
+    }));
+
     transaction.set(ventaRef, {
-      items: ventaItems,
+      items: ventaItemsSaneados,
       total,
       metodoPago: input.metodoPago,
-      cliente: input.cliente ?? "",
+      cliente: input.cliente,
+      celular: input.celular,
       fecha: serverTimestamp(),
       usuarioId: input.usuarioId,
     });

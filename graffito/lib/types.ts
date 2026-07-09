@@ -1,6 +1,17 @@
 import type { Timestamp } from "firebase/firestore";
 
-export type MetodoPago = "Efectivo" | "Tarjeta" | "Transferencia" | "Otro";
+export type MetodoPago = "Efectivo" | "Tarjeta" | "Transferencia";
+
+export const TIPOGRAFIAS = [
+  "Graffito",
+  "Arial",
+  "Courier",
+  "Comic Sans",
+  "Times New Roman",
+  "Brush Script",
+] as const;
+
+export type Tipografia = (typeof TIPOGRAFIAS)[number];
 
 export type TipoMovimiento =
   | "entrada"
@@ -57,18 +68,27 @@ export interface MovimientoStock {
   notas?: string;
 }
 
+export interface GrabadoTexto {
+  texto: string;
+  tipografia: Tipografia;
+}
+
 /**
  * Engraving choice for a cart/sale line.
  * - "ninguno": not engraved.
- * - "unico": one engraving text shared by every unit in the line.
- * - "individual": one engraving text per unit (`textos.length === cantidad`).
- * - "combo": independent, optional engraving for the agenda and the pen that make up a combo.
+ * - "unico": one engraving shared by every unit in the line.
+ * - "individual": one engraving per unit (`unidades.length === cantidad`).
+ * - "combo": independent engraving for the agenda and the pen that make up a combo.
+ *
+ * `agenda`/`boligrafo` are always present keys — `null` when that component
+ * isn't engraved, never `undefined` — because Firestore rejects `undefined`
+ * field values outright (this is what caused the combo engraving bug).
  */
 export type GrabadoInfo =
   | { modo: "ninguno" }
-  | { modo: "unico"; texto: string }
-  | { modo: "individual"; textos: string[] }
-  | { modo: "combo"; agenda?: string; boligrafo?: string };
+  | ({ modo: "unico" } & GrabadoTexto)
+  | { modo: "individual"; unidades: GrabadoTexto[] }
+  | { modo: "combo"; agenda: GrabadoTexto | null; boligrafo: GrabadoTexto | null };
 
 export interface VentaItem {
   productoId: string;
@@ -85,7 +105,8 @@ export interface Venta {
   items: VentaItem[];
   total: number;
   metodoPago: MetodoPago;
-  cliente?: string;
+  cliente: string;
+  celular: string;
   fecha: Timestamp | null;
   usuarioId: string;
 }

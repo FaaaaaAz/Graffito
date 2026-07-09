@@ -3,7 +3,7 @@
 import { Fragment, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import type { Venta } from "@/lib/types";
-import { cn, describirGrabado, formatCurrency, formatDateTime } from "@/lib/utils";
+import { cn, formatCurrency, formatDateTime, grabadoLineas } from "@/lib/utils";
 
 export default function SalesTable({ ventas }: { ventas: Venta[] }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -17,8 +17,8 @@ export default function SalesTable({ ventas }: { ventas: Venta[] }) {
   }
 
   return (
-    <div className="overflow-hidden rounded-xl border border-panel-2 bg-panel shadow-sm">
-      <table className="w-full min-w-[720px] text-left text-sm">
+    <div className="overflow-x-auto rounded-xl border border-panel-2 bg-panel shadow-sm">
+      <table className="w-full min-w-[860px] text-left text-sm">
         <thead>
           <tr className="border-b border-panel-2 text-xs uppercase tracking-wide text-ink-soft">
             <th className="px-4 py-3 font-medium">Fecha</th>
@@ -26,6 +26,7 @@ export default function SalesTable({ ventas }: { ventas: Venta[] }) {
             <th className="px-4 py-3 font-medium">Cantidad</th>
             <th className="px-4 py-3 font-medium">Método de pago</th>
             <th className="px-4 py-3 font-medium">Cliente</th>
+            <th className="px-4 py-3 font-medium">Celular</th>
             <th className="px-4 py-3 text-right font-medium">Total</th>
             <th className="w-10 px-4 py-3" />
           </tr>
@@ -51,6 +52,9 @@ export default function SalesTable({ ventas }: { ventas: Venta[] }) {
                   <td className="px-4 py-3 text-ink-soft">
                     {venta.cliente || "-"}
                   </td>
+                  <td className="px-4 py-3 text-ink-soft">
+                    {venta.celular || "-"}
+                  </td>
                   <td className="px-4 py-3 text-right font-semibold text-gold">
                     {formatCurrency(venta.total)}
                   </td>
@@ -65,23 +69,25 @@ export default function SalesTable({ ventas }: { ventas: Venta[] }) {
                 </tr>
                 {expanded && (
                   <tr className="border-b border-panel-2 bg-canvas-soft last:border-0">
-                    <td colSpan={7} className="px-4 py-3">
-                      <ul className="space-y-1.5">
+                    <td colSpan={8} className="px-4 py-3">
+                      <ul className="space-y-3">
                         {venta.items.map((item, index) => {
-                          const grabadoTexto = describirGrabado(item.grabado);
+                          const lineas = grabadoLineas(item.grabado);
                           return (
                             <li
                               key={index}
-                              className="flex flex-wrap items-center justify-between gap-2 text-xs"
+                              className="flex flex-wrap items-start justify-between gap-2 text-xs"
                             >
-                              <span className="text-ink">
-                                {item.cantidad}x {item.nombre} ({item.codigo})
-                                {grabadoTexto && (
-                                  <span className="ml-2 rounded bg-accent/15 px-1.5 py-0.5 font-medium text-accent">
-                                    {grabadoTexto}
-                                  </span>
-                                )}
-                              </span>
+                              <div>
+                                <p className="text-ink">
+                                  {item.cantidad}x {item.nombre} ({item.codigo})
+                                </p>
+                                {lineas.map((linea, i) => (
+                                  <p key={i} className="mt-0.5 text-ink-soft">
+                                    {linea.label}: &ldquo;{linea.value}&rdquo;
+                                  </p>
+                                ))}
+                              </div>
                               <span className="font-medium text-ink-soft">
                                 {formatCurrency(item.subtotal)}
                               </span>

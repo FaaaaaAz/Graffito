@@ -16,7 +16,6 @@ const METODOS: Array<MetodoPago | "Todos"> = [
   "Efectivo",
   "Tarjeta",
   "Transferencia",
-  "Otro",
 ];
 
 export default function SalesPage() {

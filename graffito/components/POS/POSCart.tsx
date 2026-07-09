@@ -1,10 +1,12 @@
 "use client";
 
+import { useState } from "react";
 import { Minus, Plus, ShoppingCart, Trash2 } from "lucide-react";
+import toast from "react-hot-toast";
 import type { CartItem, MetodoPago } from "@/lib/types";
 import { cn, formatCurrency, tieneGrabado } from "@/lib/utils";
 
-const METODOS: MetodoPago[] = ["Efectivo", "Tarjeta", "Transferencia", "Otro"];
+const METODOS: MetodoPago[] = ["Efectivo", "Tarjeta", "Transferencia"];
 
 export default function POSCart({
   items,
@@ -17,6 +19,8 @@ export default function POSCart({
   onMetodoPagoChange,
   cliente,
   onClienteChange,
+  celular,
+  onCelularChange,
   onConfirm,
 }: {
   items: CartItem[];
@@ -29,14 +33,31 @@ export default function POSCart({
   onMetodoPagoChange: (metodo: MetodoPago) => void;
   cliente: string;
   onClienteChange: (cliente: string) => void;
+  celular: string;
+  onCelularChange: (celular: string) => void;
   onConfirm: () => void;
 }) {
+  const [showErrors, setShowErrors] = useState(false);
+
   const subtotal = items.reduce(
     (sum, item) => sum + item.precioUnitario * item.cantidad,
     0
   );
   const impuesto = 0;
   const total = subtotal + impuesto;
+
+  const clienteInvalido = showErrors && !cliente.trim();
+  const celularInvalido = showErrors && !celular.trim();
+
+  function handleConfirmClick() {
+    if (!cliente.trim() || !celular.trim()) {
+      setShowErrors(true);
+      toast.error("Por favor ingresa nombre y celular del cliente");
+      return;
+    }
+    setShowErrors(false);
+    onConfirm();
+  }
 
   return (
     <div className="flex h-full flex-col rounded-xl border border-panel-2 bg-panel p-4 shadow-sm">
@@ -137,7 +158,7 @@ export default function POSCart({
             <p className="mb-1.5 text-xs font-medium text-ink-soft">
               Método de pago
             </p>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               {METODOS.map((metodo) => (
                 <button
                   key={metodo}
@@ -158,15 +179,44 @@ export default function POSCart({
 
           <div>
             <p className="mb-1.5 text-xs font-medium text-ink-soft">
-              Cliente (opcional)
+              Cliente <span className="text-red-400">*</span>
             </p>
             <input
               type="text"
               value={cliente}
               onChange={(e) => onClienteChange(e.target.value)}
               placeholder="Nombre del cliente"
-              className="w-full rounded-lg border border-panel-2 bg-canvas-soft px-3 py-2 text-sm text-ink placeholder:text-ink-soft/60 focus:border-accent focus:outline-none"
+              className={cn(
+                "w-full rounded-lg border bg-canvas-soft px-3 py-2 text-sm text-ink placeholder:text-ink-soft/60 focus:outline-none",
+                clienteInvalido
+                  ? "border-red-500 focus:border-red-500"
+                  : "border-panel-2 focus:border-accent"
+              )}
             />
+            {clienteInvalido && (
+              <p className="mt-1 text-xs text-red-400">El nombre es obligatorio.</p>
+            )}
+          </div>
+
+          <div>
+            <p className="mb-1.5 text-xs font-medium text-ink-soft">
+              Celular <span className="text-red-400">*</span>
+            </p>
+            <input
+              type="tel"
+              value={celular}
+              onChange={(e) => onCelularChange(e.target.value)}
+              placeholder="Ej. 70012345"
+              className={cn(
+                "w-full rounded-lg border bg-canvas-soft px-3 py-2 text-sm text-ink placeholder:text-ink-soft/60 focus:outline-none",
+                celularInvalido
+                  ? "border-red-500 focus:border-red-500"
+                  : "border-panel-2 focus:border-accent"
+              )}
+            />
+            {celularInvalido && (
+              <p className="mt-1 text-xs text-red-400">El celular es obligatorio.</p>
+            )}
           </div>
 
           <div className="space-y-1 rounded-lg bg-canvas-soft p-3 text-sm">
@@ -186,7 +236,7 @@ export default function POSCart({
 
           <button
             type="button"
-            onClick={onConfirm}
+            onClick={handleConfirmClick}
             disabled={items.length === 0}
             className="w-full rounded-lg bg-accent px-4 py-3 text-sm font-semibold text-canvas transition-all duration-300 hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-40"
           >

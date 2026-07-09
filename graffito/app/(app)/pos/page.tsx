@@ -22,6 +22,7 @@ export default function POSPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [metodoPago, setMetodoPago] = useState<MetodoPago>("Efectivo");
   const [cliente, setCliente] = useState("");
+  const [celular, setCelular] = useState("");
   const [showPayment, setShowPayment] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -118,12 +119,14 @@ export default function POSPage() {
         })),
         metodoPago,
         cliente,
+        celular,
         usuarioId: user.uid,
       });
       toast.success("Venta registrada correctamente");
       setCart([]);
       setSelectedId(null);
       setCliente("");
+      setCelular("");
       setMetodoPago("Efectivo");
       setShowPayment(false);
     } catch (error) {
@@ -166,6 +169,8 @@ export default function POSPage() {
           onMetodoPagoChange={setMetodoPago}
           cliente={cliente}
           onClienteChange={setCliente}
+          celular={celular}
+          onCelularChange={setCelular}
           onConfirm={() => setShowPayment(true)}
         />
       </div>
@@ -175,6 +180,7 @@ export default function POSPage() {
           items={cart}
           metodoPago={metodoPago}
           cliente={cliente}
+          celular={celular}
           submitting={submitting}
           onClose={() => setShowPayment(false)}
           onConfirm={handleConfirmVenta}

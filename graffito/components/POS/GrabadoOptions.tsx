@@ -1,8 +1,9 @@
 "use client";
 
 import { PenLine } from "lucide-react";
-import type { CartItem, GrabadoInfo } from "@/lib/types";
-import { cn, grabadoElegibilidad } from "@/lib/utils";
+import type { CartItem, GrabadoInfo, GrabadoTexto, Tipografia } from "@/lib/types";
+import { TIPOGRAFIAS } from "@/lib/types";
+import { cn, grabadoElegibilidad, grabadoTextoVacio, tipografiaFontFamily } from "@/lib/utils";
 
 function Frame({ children }: { children: React.ReactNode }) {
   return (
@@ -30,8 +31,75 @@ function ProductSummary({ item }: { item: CartItem }) {
 
 const textareaClass =
   "w-full resize-none rounded-lg border border-panel-2 bg-canvas-soft p-3 text-sm text-ink placeholder:text-ink-soft/60 focus:border-accent focus:outline-none";
-const inputClass =
-  "w-full rounded-lg border border-panel-2 bg-canvas-soft px-3 py-2 text-sm text-ink placeholder:text-ink-soft/60 focus:border-accent focus:outline-none";
+
+function TipografiaSelect({
+  value,
+  onChange,
+}: {
+  value: Tipografia;
+  onChange: (tipografia: Tipografia) => void;
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value as Tipografia)}
+      className="w-full rounded-lg border border-gold/40 bg-canvas-soft px-3 py-2 text-sm font-medium text-gold focus:border-gold focus:outline-none"
+    >
+      {TIPOGRAFIAS.map((t) => (
+        <option key={t} value={t}>
+          {t}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+function GrabadoTextoEditor({
+  value,
+  onChange,
+  placeholder,
+  rows = 3,
+  label,
+  autoFocus,
+}: {
+  value: GrabadoTexto;
+  onChange: (value: GrabadoTexto) => void;
+  placeholder: string;
+  rows?: number;
+  label?: string;
+  autoFocus?: boolean;
+}) {
+  return (
+    <div className="space-y-2">
+      {label && <p className="text-xs font-medium text-ink-soft">{label}</p>}
+      <textarea
+        value={value.texto}
+        onChange={(e) => onChange({ ...value, texto: e.target.value })}
+        placeholder={placeholder}
+        rows={rows}
+        autoFocus={autoFocus}
+        className={textareaClass}
+      />
+      <div>
+        <label className="mb-1 block text-xs font-medium text-ink-soft">
+          Tipografía
+        </label>
+        <TipografiaSelect
+          value={value.tipografia}
+          onChange={(tipografia) => onChange({ ...value, tipografia })}
+        />
+      </div>
+      {value.texto.trim() && (
+        <p
+          className="truncate rounded-lg border border-panel-2 bg-canvas-soft px-3 py-2 text-sm text-gold"
+          style={{ fontFamily: tipografiaFontFamily(value.tipografia) }}
+        >
+          {value.texto}
+        </p>
+      )}
+    </div>
+  );
+}
 
 export default function GrabadoOptions({
   item,
@@ -65,15 +133,14 @@ export default function GrabadoOptions({
 
   if (elegibilidad === "combo") {
     const g = item.grabado.modo === "combo" ? item.grabado : null;
-    const agendaChecked = g?.agenda !== undefined;
-    const boligrafoChecked = g?.boligrafo !== undefined;
+    const agendaValue = g?.agenda ?? null;
+    const boligrafoValue = g?.boligrafo ?? null;
 
-    function setCombo(patch: { agenda?: string; boligrafo?: string }) {
-      const next = {
-        agenda: "agenda" in patch ? patch.agenda : g?.agenda,
-        boligrafo: "boligrafo" in patch ? patch.boligrafo : g?.boligrafo,
-      };
-      if (next.agenda === undefined && next.boligrafo === undefined) {
+    function setCombo(next: {
+      agenda: GrabadoTexto | null;
+      boligrafo: GrabadoTexto | null;
+    }) {
+      if (next.agenda === null && next.boligrafo === null) {
         onChange({ modo: "ninguno" });
       } else {
         onChange({ modo: "combo", ...next });
@@ -88,22 +155,26 @@ export default function GrabadoOptions({
             <label className="flex items-center gap-2 text-sm text-ink">
               <input
                 type="checkbox"
-                checked={agendaChecked}
+                checked={agendaValue !== null}
                 onChange={(e) =>
-                  setCombo({ agenda: e.target.checked ? "" : undefined })
+                  setCombo({
+                    agenda: e.target.checked ? grabadoTextoVacio() : null,
+                    boligrafo: boligrafoValue,
+                  })
                 }
                 className="h-4 w-4 rounded border-panel-2 accent-[#F5C518]"
               />
               Grabado en la agenda
             </label>
-            {agendaChecked && (
-              <textarea
-                value={g?.agenda ?? ""}
-                onChange={(e) => setCombo({ agenda: e.target.value })}
-                placeholder='Ej. "Para mi mamá"'
-                rows={2}
-                className={cn(textareaClass, "mt-2")}
-              />
+            {agendaValue && (
+              <div className="mt-2">
+                <GrabadoTextoEditor
+                  value={agendaValue}
+                  onChange={(agenda) => setCombo({ agenda, boligrafo: boligrafoValue })}
+                  placeholder='Ej. "Para mi mamá"'
+                  rows={2}
+                />
+              </div>
             )}
           </div>
 
@@ -111,22 +182,26 @@ export default function GrabadoOptions({
             <label className="flex items-center gap-2 text-sm text-ink">
               <input
                 type="checkbox"
-                checked={boligrafoChecked}
+                checked={boligrafoValue !== null}
                 onChange={(e) =>
-                  setCombo({ boligrafo: e.target.checked ? "" : undefined })
+                  setCombo({
+                    agenda: agendaValue,
+                    boligrafo: e.target.checked ? grabadoTextoVacio() : null,
+                  })
                 }
                 className="h-4 w-4 rounded border-panel-2 accent-[#F5C518]"
               />
               Grabado en el bolígrafo
             </label>
-            {boligrafoChecked && (
-              <textarea
-                value={g?.boligrafo ?? ""}
-                onChange={(e) => setCombo({ boligrafo: e.target.value })}
-                placeholder='Ej. "Con cariño"'
-                rows={2}
-                className={cn(textareaClass, "mt-2")}
-              />
+            {boligrafoValue && (
+              <div className="mt-2">
+                <GrabadoTextoEditor
+                  value={boligrafoValue}
+                  onChange={(boligrafo) => setCombo({ agenda: agendaValue, boligrafo })}
+                  placeholder='Ej. "Con cariño"'
+                  rows={2}
+                />
+              </div>
             )}
           </div>
 
@@ -144,27 +219,29 @@ export default function GrabadoOptions({
   const checked = grabadoActual.modo !== "ninguno";
 
   function toggleChecked(next: boolean) {
-    onChange(next ? { modo: "unico", texto: "" } : { modo: "ninguno" });
+    onChange(next ? { modo: "unico", ...grabadoTextoVacio() } : { modo: "ninguno" });
   }
 
   function setModo(modo: "unico" | "individual") {
     if (modo === "unico") {
-      const texto =
+      const base: GrabadoTexto =
         grabadoActual.modo === "individual"
-          ? (grabadoActual.textos[0] ?? "")
+          ? (grabadoActual.unidades[0] ?? grabadoTextoVacio())
           : grabadoActual.modo === "unico"
-            ? grabadoActual.texto
-            : "";
-      onChange({ modo: "unico", texto });
+            ? { texto: grabadoActual.texto, tipografia: grabadoActual.tipografia }
+            : grabadoTextoVacio();
+      onChange({ modo: "unico", ...base });
     } else {
-      const previo =
-        grabadoActual.modo === "individual" ? grabadoActual.textos : [];
-      const previoUnico = grabadoActual.modo === "unico" ? grabadoActual.texto : "";
-      const textos = Array.from(
+      const previo = grabadoActual.modo === "individual" ? grabadoActual.unidades : [];
+      const previoUnico: GrabadoTexto =
+        grabadoActual.modo === "unico"
+          ? { texto: grabadoActual.texto, tipografia: grabadoActual.tipografia }
+          : grabadoTextoVacio();
+      const unidades = Array.from(
         { length: cantidadActual },
-        (_, i) => previo[i] ?? (i === 0 ? previoUnico : "")
+        (_, i) => previo[i] ?? (i === 0 ? previoUnico : grabadoTextoVacio())
       );
-      onChange({ modo: "individual", textos });
+      onChange({ modo: "individual", unidades });
     }
   }
 
@@ -183,12 +260,11 @@ export default function GrabadoOptions({
       </label>
 
       {checked && item.cantidad === 1 && item.grabado.modo === "unico" && (
-        <textarea
-          value={item.grabado.texto}
-          onChange={(e) => onChange({ modo: "unico", texto: e.target.value })}
+        <GrabadoTextoEditor
+          value={{ texto: item.grabado.texto, tipografia: item.grabado.tipografia }}
+          onChange={(v) => onChange({ modo: "unico", ...v })}
           placeholder='Ej. "Feliz Día Papá"'
           rows={4}
-          className={textareaClass}
           autoFocus
         />
       )}
@@ -223,35 +299,30 @@ export default function GrabadoOptions({
           </div>
 
           {item.grabado.modo === "unico" && (
-            <textarea
-              value={item.grabado.texto}
-              onChange={(e) => onChange({ modo: "unico", texto: e.target.value })}
+            <GrabadoTextoEditor
+              value={{ texto: item.grabado.texto, tipografia: item.grabado.tipografia }}
+              onChange={(v) => onChange({ modo: "unico", ...v })}
               placeholder='Ej. "Feliz Día Papá"'
               rows={4}
-              className={textareaClass}
             />
           )}
 
           {item.grabado.modo === "individual" && (
-            <div className="flex-1 space-y-2 overflow-y-auto pr-1">
-              {item.grabado.textos.map((texto, index) => (
-                <div key={index}>
-                  <label className="mb-1 block text-xs text-ink-soft">
-                    Unidad {index + 1}
-                  </label>
-                  <input
-                    type="text"
-                    value={texto}
-                    onChange={(e) => {
-                      if (item.grabado.modo !== "individual") return;
-                      const textos = [...item.grabado.textos];
-                      textos[index] = e.target.value;
-                      onChange({ modo: "individual", textos });
-                    }}
-                    placeholder={`Grabado para la unidad ${index + 1}`}
-                    className={inputClass}
-                  />
-                </div>
+            <div className="flex-1 space-y-4 overflow-y-auto pr-1">
+              {item.grabado.unidades.map((unidad, index) => (
+                <GrabadoTextoEditor
+                  key={index}
+                  label={`Unidad ${index + 1}`}
+                  value={unidad}
+                  onChange={(v) => {
+                    if (item.grabado.modo !== "individual") return;
+                    const unidades = [...item.grabado.unidades];
+                    unidades[index] = v;
+                    onChange({ modo: "individual", unidades });
+                  }}
+                  placeholder={`Grabado para la unidad ${index + 1}`}
+                  rows={2}
+                />
               ))}
             </div>
           )}
