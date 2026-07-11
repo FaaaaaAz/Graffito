@@ -33,18 +33,25 @@ jobs:
         run: npm run lint
         continue-on-error: true
 
+      # Pinned (not @latest): an unpinned version once resolved to a CLI
+      # build with a flaky "spawn sh ENOENT" bug on this exact command
+      # sequence. 55.0.0 is the version that produced a correct build
+      # (all 10 routes) in earlier runs.
       - name: Install Vercel CLI
-        run: npm install --global vercel@latest
+        run: npm install --global vercel@55.0.0
 
-      # Runs from the repo root (not graffito/) because the Vercel
+      # These run from the repo root (not graffito/) because the Vercel
       # project's "Root Directory" setting is already "graffito" — the
-      # CLI resolves that itself.
+      # CLI resolves that itself, and building locally + uploading the
+      # prebuilt output is the documented-reliable path for a project
+      # whose app lives in a subfolder (plain "vercel deploy" without a
+      # local build produced a build that looked fine but 404'd on every
+      # route — a remote-build/rootDirectory interaction bug).
       - name: Pull Vercel environment information
         run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
 
-      # No local "vercel build" + "--prebuilt" step here on purpose: building
-      # locally on the runner hit an intermittent "spawn sh ENOENT" bug in the
-      # Vercel CLI. Letting Vercel build remotely (its normal, most-tested
-      # path) sidesteps that entirely.
+      - name: Build project artifacts
+        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+
       - name: Deploy to Vercel
-        run: vercel deploy --prod --token=${{ secrets.VERCEL_TOKEN }}
+        run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
