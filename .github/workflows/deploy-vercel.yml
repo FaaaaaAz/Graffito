@@ -12,9 +12,6 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: graffito
 
     steps:
       - name: Checkout code
@@ -28,15 +25,21 @@ jobs:
           cache-dependency-path: graffito/package-lock.json
 
       - name: Install dependencies
+        working-directory: graffito
         run: npm ci
 
       - name: Run linter
+        working-directory: graffito
         run: npm run lint
         continue-on-error: true
 
       - name: Install Vercel CLI
         run: npm install --global vercel@latest
 
+      # These three run from the repo root (not graffito/) because the
+      # Vercel project's "Root Directory" setting is already "graffito" —
+      # the CLI resolves that itself. Also cd-ing into graffito/ here
+      # double-nests the path and breaks the CLI with "spawn sh ENOENT".
       - name: Pull Vercel environment information
         run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
 
