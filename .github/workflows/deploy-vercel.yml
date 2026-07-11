@@ -40,18 +40,21 @@ jobs:
       - name: Install Vercel CLI
         run: npm install --global vercel@55.0.0
 
-      # These run from the repo root (not graffito/) because the Vercel
-      # project's "Root Directory" setting is already "graffito" — the
-      # CLI resolves that itself, and building locally + uploading the
-      # prebuilt output is the documented-reliable path for a project
-      # whose app lives in a subfolder (plain "vercel deploy" without a
-      # local build produced a build that looked fine but 404'd on every
-      # route — a remote-build/rootDirectory interaction bug).
+      # All three run from inside graffito/ now. The project's "Root
+      # Directory" setting is cleared (empty) in Vercel — combining that
+      # setting with CLI-triggered deploys from the repo root produced
+      # "successful" deployments that 404'd on every route, in both the
+      # remote-build and local-build+--prebuilt flows. Treating graffito/
+      # as the CLI's own root directly (cd into it, no rootDirectory
+      # concept at all) sidesteps that.
       - name: Pull Vercel environment information
+        working-directory: graffito
         run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Build project artifacts
+        working-directory: graffito
         run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Deploy to Vercel
+        working-directory: graffito
         run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
