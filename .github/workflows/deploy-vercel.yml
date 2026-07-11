@@ -36,15 +36,15 @@ jobs:
       - name: Install Vercel CLI
         run: npm install --global vercel@latest
 
-      # These three run from the repo root (not graffito/) because the
-      # Vercel project's "Root Directory" setting is already "graffito" —
-      # the CLI resolves that itself. Also cd-ing into graffito/ here
-      # double-nests the path and breaks the CLI with "spawn sh ENOENT".
+      # Runs from the repo root (not graffito/) because the Vercel
+      # project's "Root Directory" setting is already "graffito" — the
+      # CLI resolves that itself.
       - name: Pull Vercel environment information
         run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
 
-      - name: Build project artifacts
-        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
-
+      # No local "vercel build" + "--prebuilt" step here on purpose: building
+      # locally on the runner hit an intermittent "spawn sh ENOENT" bug in the
+      # Vercel CLI. Letting Vercel build remotely (its normal, most-tested
+      # path) sidesteps that entirely.
       - name: Deploy to Vercel
-        run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
+        run: vercel deploy --prod --token=${{ secrets.VERCEL_TOKEN }}
