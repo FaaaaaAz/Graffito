@@ -66,6 +66,43 @@ export interface MovimientoStock {
   fecha: Timestamp | null;
   usuarioId: string;
   notas?: string;
+  /** True when `productoId` refers to a `packaging/{id}` doc instead of `productos/{codigo}`. */
+  esPackaging?: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Packaging (bags/boxes) — no price, no engraving, stock-tracked, and either
+// auto-linked to a product via `productosPackaging` or added manually in the
+// cart. See lib/db.ts and hooks/usePackaging.ts.
+// ---------------------------------------------------------------------------
+
+export type PackagingCategoria = "bag" | "box";
+
+/** Document id in `packaging/{id}` is a stable slug (e.g. "pkg-bag-mediana"), distinct from `codigo`. */
+export interface ProductoPackaging {
+  id: string;
+  codigo: string;
+  nombre: string;
+  categoria: PackagingCategoria;
+  /** Only meaningful for bags ("Pequeña"/"Mediana"/"Grande"). */
+  tamanio?: string;
+  imageUrl: string;
+  stock: number;
+  stockMinimo: number;
+  creadoEn: Timestamp | null;
+  actualizadoEn: Timestamp | null;
+}
+
+export interface VinculoPackagingEntry {
+  packageId: string;
+  cantidad: number;
+}
+
+/** Document id in `productosPackaging/{productoId}` — defines the packaging auto-attached when that product is added to the cart. */
+export interface VinculoProductoPackaging {
+  id: string;
+  productoId: string;
+  packaging: VinculoPackagingEntry[];
 }
 
 export interface GrabadoTexto {
@@ -90,6 +127,15 @@ export type GrabadoInfo =
   | { modo: "individual"; unidades: GrabadoTexto[] }
   | { modo: "combo"; agenda: GrabadoTexto | null; boligrafo: GrabadoTexto | null };
 
+/** A packaging line actually consumed by a sale item, resolved at checkout time for the receipt/audit trail. */
+export interface VentaItemPackaging {
+  packageId: string;
+  codigo: string;
+  nombre: string;
+  /** Total units consumed for this sale line (already multiplied by the item's cantidad). */
+  cantidad: number;
+}
+
 export interface VentaItem {
   productoId: string;
   codigo: string;
@@ -98,6 +144,7 @@ export interface VentaItem {
   precioUnitario: number;
   subtotal: number;
   grabado: GrabadoInfo;
+  packaging: VentaItemPackaging[];
 }
 
 export interface Venta {
@@ -139,6 +186,21 @@ export interface ConfiguracionGeneral {
   stockMinimoGlobal: number;
 }
 
+/**
+ * A packaging type attached to a cart line. `cantidadPorUnidad` is a rate
+ * (units of packaging per 1 unit of the product), so the total consumed
+ * (`cantidadPorUnidad * item.cantidad`) automatically stays in sync as the
+ * cart line's quantity changes — no separate resize step needed, mirroring
+ * how `resizeGrabadoParaCantidad` keeps engraving in sync.
+ */
+export interface CartPackagingLine {
+  packageId: string;
+  codigo: string;
+  nombre: string;
+  imageUrl: string;
+  cantidadPorUnidad: number;
+}
+
 export interface CartItem {
   productoId: string;
   codigo: string;
@@ -150,4 +212,5 @@ export interface CartItem {
   imageUrl: string;
   tipo?: "combo";
   grabado: GrabadoInfo;
+  packaging: CartPackagingLine[];
 }

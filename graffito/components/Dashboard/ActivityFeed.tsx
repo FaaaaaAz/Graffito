@@ -6,8 +6,8 @@ import {
   ChevronRight,
   Receipt,
 } from "lucide-react";
-import type { MovimientoStock, Producto, Venta } from "@/lib/types";
-import { formatCurrency, formatTime, stockStatus } from "@/lib/utils";
+import type { MovimientoStock, Venta } from "@/lib/types";
+import { formatCurrency, formatTime, type AlertaStock } from "@/lib/utils";
 
 const LIMITE = 5;
 
@@ -128,10 +128,7 @@ export function RecentMovements({
   );
 }
 
-export function CriticalStockAlerts({ productos }: { productos: Producto[] }) {
-  const alertas = productos.filter(
-    (p) => stockStatus(p.stock, p.stockMinimo) !== "en-stock"
-  );
+export function CriticalStockAlerts({ alertas }: { alertas: AlertaStock[] }) {
   const items = alertas.slice(0, LIMITE);
 
   return (
@@ -144,25 +141,30 @@ export function CriticalStockAlerts({ productos }: { productos: Producto[] }) {
         <Empty label="Todo el inventario está en niveles saludables." />
       ) : (
         <ul className="space-y-3">
-          {items.map((producto) => (
+          {items.map((alerta) => (
             <li
-              key={producto.id}
+              key={`${alerta.tipo}-${alerta.id}`}
               className="flex items-center justify-between gap-3"
             >
               <div className="flex items-center gap-3 min-w-0">
                 <AlertTriangle
                   className={
-                    producto.stock <= 0
+                    alerta.stock <= 0
                       ? "h-5 w-5 shrink-0 text-red-400"
                       : "h-5 w-5 shrink-0 text-accent"
                   }
                 />
                 <p className="truncate text-sm text-ink">
-                  {producto.nombre} · {producto.codigo}
+                  {alerta.nombre} · {alerta.codigo}
+                  {alerta.tipo === "packaging" && (
+                    <span className="ml-1.5 rounded bg-accent/15 px-1.5 py-0.5 text-[9px] font-medium text-accent">
+                      Packaging
+                    </span>
+                  )}
                 </p>
               </div>
               <span className="shrink-0 text-sm font-semibold text-ink-soft">
-                {producto.stock} u.
+                {alerta.stock} u.
               </span>
             </li>
           ))}

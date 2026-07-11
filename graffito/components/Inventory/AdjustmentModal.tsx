@@ -3,12 +3,19 @@
 import { useState } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { Producto, TipoMovimiento } from "@/lib/types";
+import type { TipoMovimiento } from "@/lib/types";
 
 const MOTIVOS_SALIDA: Array<{ value: TipoMovimiento; label: string }> = [
   { value: "ajuste", label: "Ajuste de inventario" },
   { value: "perdida", label: "Pérdida / daño" },
 ];
+
+/** Minimal shape needed to render/submit an adjustment — satisfied by both `Producto` and `ProductoPackaging`. */
+export interface AjustableItem {
+  nombre: string;
+  codigo: string;
+  stock: number;
+}
 
 export default function AdjustmentModal({
   producto,
@@ -17,7 +24,7 @@ export default function AdjustmentModal({
   onClose,
   onSubmit,
 }: {
-  producto: Producto;
+  producto: AjustableItem;
   mode: "entrada" | "salida";
   submitting: boolean;
   onClose: () => void;

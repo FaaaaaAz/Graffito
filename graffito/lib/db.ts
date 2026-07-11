@@ -29,10 +29,14 @@ import type {
   ItemBaseCombo,
   MetodoPago,
   MovimientoStock,
+  PackagingCategoria,
   Producto,
+  ProductoPackaging,
   TipoMovimiento,
   Venta,
   VentaItem,
+  VinculoPackagingEntry,
+  VinculoProductoPackaging,
 } from "./types";
 
 function withId<T>(snap: QueryDocumentSnapshot) {
@@ -180,13 +184,78 @@ export async function adjustStock(input: AjusteStockInput) {
 }
 
 // ---------------------------------------------------------------------------
+// Packaging (bags/boxes) — fixed catalog, stock-tracked, no price/engraving.
+// ---------------------------------------------------------------------------
+
+export function subscribePackaging(cb: (packaging: ProductoPackaging[]) => void) {
+  const q = query(collection(db, "packaging"), orderBy("nombre", "asc"));
+  return onSnapshot(q, (snap) => {
+    cb(snap.docs.map((d) => withId<ProductoPackaging>(d)));
+  });
+}
+
+export function subscribeVinculosPackaging(
+  cb: (vinculos: VinculoProductoPackaging[]) => void
+) {
+  return onSnapshot(collection(db, "productosPackaging"), (snap) => {
+    cb(snap.docs.map((d) => withId<VinculoProductoPackaging>(d)));
+  });
+}
+
+export interface AjustePackagingInput {
+  packageId: string;
+  delta: number;
+  tipo: TipoMovimiento;
+  notas?: string;
+  usuarioId: string;
+}
+
+export async function adjustPackagingStock(input: AjustePackagingInput) {
+  const ref = doc(db, "packaging", input.packageId);
+
+  await runTransaction(db, async (transaction) => {
+    const snap = await transaction.get(ref);
+    if (!snap.exists()) {
+      throw new Error("El packaging ya no existe.");
+    }
+    const data = snap.data() as ProductoPackaging;
+    const nuevoStock = data.stock + input.delta;
+    if (nuevoStock < 0) {
+      throw new Error("El stock no puede quedar negativo.");
+    }
+
+    transaction.update(ref, { stock: nuevoStock, actualizadoEn: serverTimestamp() });
+
+    const movimientoRef = doc(collection(db, "movimientosStock"));
+    transaction.set(movimientoRef, {
+      productoId: input.packageId,
+      codigo: data.codigo,
+      nombre: data.nombre,
+      tipo: input.tipo,
+      cantidad: input.delta,
+      fecha: serverTimestamp(),
+      usuarioId: input.usuarioId,
+      notas: input.notas ?? "",
+      esPackaging: true,
+    });
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Ventas — atomic, combo-aware stock deduction
 // ---------------------------------------------------------------------------
+
+export interface NuevaVentaItemPackagingInput {
+  packageId: string;
+  /** Total units needed for this cart line (already multiplied by the line's cantidad). */
+  cantidad: number;
+}
 
 export interface NuevaVentaItemInput {
   productoId: string;
   cantidad: number;
   grabado: GrabadoInfo;
+  packaging?: NuevaVentaItemPackagingInput[];
 }
 
 export interface NuevaVentaInput {
@@ -223,6 +292,10 @@ export async function createVenta(input: NuevaVentaInput) {
       string,
       { ref: DocumentReference; cantidad: number; snap?: DocumentSnapshot }
     >();
+    const packagingDescuentos = new Map<
+      string,
+      { ref: DocumentReference; cantidad: number; snap?: DocumentSnapshot }
+    >();
 
     topSnaps.forEach((snap, index) => {
       const item = input.items[index];
@@ -239,6 +312,7 @@ export async function createVenta(input: NuevaVentaInput) {
         precioUnitario: data.precio,
         subtotal: data.precio * item.cantidad,
         grabado: item.grabado,
+        packaging: [],
       });
 
       if (data.tipo === "combo" && data.itemsBase && data.itemsBase.length > 0) {
@@ -258,6 +332,15 @@ export async function createVenta(input: NuevaVentaInput) {
           snap, // already fetched above — no need to re-read
         });
       }
+
+      (item.packaging ?? []).forEach((pkg) => {
+        if (pkg.cantidad <= 0) return;
+        const existing = packagingDescuentos.get(pkg.packageId);
+        packagingDescuentos.set(pkg.packageId, {
+          ref: doc(db, "packaging", pkg.packageId),
+          cantidad: (existing?.cantidad ?? 0) + pkg.cantidad,
+        });
+      });
     });
 
     const entries = Array.from(descuentos.entries());
@@ -267,6 +350,14 @@ export async function createVenta(input: NuevaVentaInput) {
     );
     pending.forEach(([, d], i) => {
       d.snap = fetched[i];
+    });
+
+    const packagingEntries = Array.from(packagingDescuentos.entries());
+    const packagingFetched = await Promise.all(
+      packagingEntries.map(([, d]) => transaction.get(d.ref))
+    );
+    packagingEntries.forEach(([, d], i) => {
+      d.snap = packagingFetched[i];
     });
 
     entries.forEach(([codigo, d]) => {
@@ -284,6 +375,39 @@ export async function createVenta(input: NuevaVentaInput) {
       }
     });
 
+    packagingEntries.forEach(([packageId, d]) => {
+      const snap = d.snap!;
+      if (!snap.exists()) {
+        throw new Error(`El packaging "${packageId}" ya no existe.`);
+      }
+      const stockActual = (snap.data()!.stock as number) ?? 0;
+      if (stockActual < d.cantidad) {
+        throw new Error(
+          `Stock insuficiente de "${
+            (snap.data()!.nombre as string) ?? packageId
+          }". Por favor, contacta al administrador.`
+        );
+      }
+    });
+
+    // Attach the resolved packaging (codigo/nombre) to each sale line for
+    // the receipt/audit trail — the cart already knows quantities, but not
+    // necessarily the freshest codigo/nombre.
+    ventaItems.forEach((vi, index) => {
+      const pkgList = input.items[index].packaging ?? [];
+      vi.packaging = pkgList
+        .filter((p) => p.cantidad > 0)
+        .map((p) => {
+          const data = packagingDescuentos.get(p.packageId)?.snap?.data();
+          return {
+            packageId: p.packageId,
+            codigo: (data?.codigo as string) ?? p.packageId,
+            nombre: (data?.nombre as string) ?? p.packageId,
+            cantidad: p.cantidad,
+          };
+        });
+    });
+
     const total = ventaItems.reduce((sum, item) => sum + item.subtotal, 0);
 
     // Firestore rejects `undefined` field values outright — the GrabadoInfo
@@ -292,6 +416,7 @@ export async function createVenta(input: NuevaVentaInput) {
     const ventaItemsSaneados = ventaItems.map((item) => ({
       ...item,
       grabado: sanitizeForFirestore(item.grabado),
+      packaging: sanitizeForFirestore(item.packaging),
     }));
 
     transaction.set(ventaRef, {
@@ -319,6 +444,29 @@ export async function createVenta(input: NuevaVentaInput) {
         fecha: serverTimestamp(),
         usuarioId: input.usuarioId,
         notas: "",
+      });
+    });
+
+    packagingEntries.forEach(([packageId, d]) => {
+      const snap = d.snap!;
+      const data = snap.data()!;
+      const stockActual = (data.stock as number) ?? 0;
+      transaction.update(d.ref, {
+        stock: stockActual - d.cantidad,
+        actualizadoEn: serverTimestamp(),
+      });
+
+      const movimientoRef = doc(collection(db, "movimientosStock"));
+      transaction.set(movimientoRef, {
+        productoId: packageId,
+        codigo: (data.codigo as string) ?? packageId,
+        nombre: (data.nombre as string) ?? packageId,
+        tipo: "venta",
+        cantidad: d.cantidad,
+        fecha: serverTimestamp(),
+        usuarioId: input.usuarioId,
+        notas: "",
+        esPackaging: true,
       });
     });
 
@@ -547,6 +695,111 @@ export async function ensureSeedData() {
       creadoEn: serverTimestamp(),
       actualizadoEn: serverTimestamp(),
     });
+  });
+
+  await batch.commit();
+}
+
+// ---------------------------------------------------------------------------
+// Datos de ejemplo (seed) — Packaging catalog + default product↔packaging
+// links. Gated by its own `meta/seedPackaging` claim (independent of
+// `meta/seed`) so it also runs for installs whose product catalog was
+// already seeded before packaging existed.
+// ---------------------------------------------------------------------------
+
+interface PackagingSeedItem {
+  id: string;
+  codigo: string;
+  nombre: string;
+  categoria: PackagingCategoria;
+  tamanio?: string;
+  imageUrl: string;
+  stock: number;
+  stockMinimo: number;
+}
+
+const PACKAGING_SEED: PackagingSeedItem[] = [
+  { id: "pkg-bag-pequena", codigo: "BAG-PEQUENA", nombre: "Bolsa Pequeña", categoria: "bag", tamanio: "Pequeña", imageUrl: "/images/products/packaging/bags/bolsa-pequena.jpg", stock: 100, stockMinimo: 10 },
+  { id: "pkg-bag-mediana", codigo: "BAG-MEDIANA", nombre: "Bolsa Mediana", categoria: "bag", tamanio: "Mediana", imageUrl: "/images/products/packaging/bags/bolsa-mediana.jpg", stock: 100, stockMinimo: 10 },
+  { id: "pkg-bag-grande", codigo: "BAG-GRANDE", nombre: "Bolsa Grande", categoria: "bag", tamanio: "Grande", imageUrl: "/images/products/packaging/bags/bolsa-grande.jpg", stock: 100, stockMinimo: 10 },
+  { id: "pkg-box-agenda-bloc", codigo: "BOX-AGENDA-BLOC", nombre: "Caja Agenda + Bloc", categoria: "box", imageUrl: "/images/products/packaging/boxes/caja-agenda-bloc.jpg", stock: 50, stockMinimo: 5 },
+  { id: "pkg-box-muller", codigo: "BOX-MULLER", nombre: "Caja Bolígrafo Muller", categoria: "box", imageUrl: "/images/products/packaging/boxes/caja-boligrafo-muller.jpg", stock: 100, stockMinimo: 10 },
+  { id: "pkg-box-collar", codigo: "BOX-COLLAR", nombre: "Caja Collar/Manilla", categoria: "box", imageUrl: "/images/products/packaging/boxes/caja-collar-manilla.jpg", stock: 50, stockMinimo: 5 },
+];
+
+/**
+ * Default packaging links are derived from category, not hand-listed per
+ * product: every Agenda gets a medium bag, every Muller pen gets a medium
+ * bag + its box, every combo gets the agenda+bloc box + a large bag, and
+ * Tomatodos/Refills get none (the user can still attach packaging manually
+ * in the cart). This mirrors how grabado eligibility is category-driven
+ * (see grabadoElegibilidad in lib/utils.ts) and stays correct automatically
+ * if the catalog changes, instead of drifting out of sync with a static list.
+ */
+function buildPackagingVinculosSeed(
+  catalogo: ProductoSeed[]
+): Array<{ productoId: string; packaging: VinculoPackagingEntry[] }> {
+  const vinculos: Array<{ productoId: string; packaging: VinculoPackagingEntry[] }> = [];
+
+  catalogo.forEach((producto) => {
+    if (producto.tipo === "combo") {
+      vinculos.push({
+        productoId: producto.codigo,
+        packaging: [
+          { packageId: "pkg-box-agenda-bloc", cantidad: 1 },
+          { packageId: "pkg-bag-grande", cantidad: 1 },
+        ],
+      });
+    } else if (producto.categoria === "Agendas") {
+      vinculos.push({
+        productoId: producto.codigo,
+        packaging: [{ packageId: "pkg-bag-mediana", cantidad: 1 }],
+      });
+    } else if (producto.categoria === "Muller") {
+      vinculos.push({
+        productoId: producto.codigo,
+        packaging: [
+          { packageId: "pkg-bag-mediana", cantidad: 1 },
+          { packageId: "pkg-box-muller", cantidad: 1 },
+        ],
+      });
+    }
+    // Tomatodos & Refills: no default packaging.
+  });
+
+  return vinculos;
+}
+
+export async function ensurePackagingSeedData() {
+  const seedRef = doc(db, "meta", "seedPackaging");
+  const claimed = await runTransaction(db, async (transaction) => {
+    const snap = await transaction.get(seedRef);
+    if (snap.exists()) return false;
+    transaction.set(seedRef, { seededAt: serverTimestamp() });
+    return true;
+  });
+  if (!claimed) return;
+
+  const batch = writeBatch(db);
+
+  PACKAGING_SEED.forEach((pkg) => {
+    const ref = doc(db, "packaging", pkg.id);
+    batch.set(ref, {
+      codigo: pkg.codigo,
+      nombre: pkg.nombre,
+      categoria: pkg.categoria,
+      ...(pkg.tamanio ? { tamanio: pkg.tamanio } : {}),
+      imageUrl: pkg.imageUrl,
+      stock: pkg.stock,
+      stockMinimo: pkg.stockMinimo,
+      creadoEn: serverTimestamp(),
+      actualizadoEn: serverTimestamp(),
+    });
+  });
+
+  buildPackagingVinculosSeed(buildCatalogoSeed()).forEach((vinculo) => {
+    const ref = doc(db, "productosPackaging", vinculo.productoId);
+    batch.set(ref, vinculo);
   });
 
   await batch.commit();

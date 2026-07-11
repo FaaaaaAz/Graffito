@@ -4,8 +4,10 @@ import type {
   GrabadoInfo,
   GrabadoTexto,
   Producto,
+  ProductoPackaging,
   Tipografia,
   Venta,
+  VinculoProductoPackaging,
 } from "./types";
 
 export type GrabadoElegibilidad = "ninguno" | "simple" | "combo";
@@ -138,6 +140,67 @@ export function stockDisponible(
       return Math.floor(stockBase / base.cantidad);
     })
   );
+}
+
+export function packagingPorId(
+  packaging: ProductoPackaging[]
+): Map<string, ProductoPackaging> {
+  return new Map(packaging.map((p) => [p.id, p]));
+}
+
+export function vinculosPorProducto(
+  vinculos: VinculoProductoPackaging[]
+): Map<string, VinculoProductoPackaging> {
+  return new Map(vinculos.map((v) => [v.productoId, v]));
+}
+
+export function packagingCategoriaLabel(
+  categoria: ProductoPackaging["categoria"]
+): string {
+  return categoria === "bag" ? "Bolsa" : "Caja";
+}
+
+/** Unified stock-alert shape shared by products and packaging (see Dashboard). */
+export interface AlertaStock {
+  id: string;
+  nombre: string;
+  codigo: string;
+  stock: number;
+  stockMinimo: number;
+  tipo: "producto" | "packaging";
+}
+
+export function construirAlertasStock(
+  productos: Producto[],
+  packaging: ProductoPackaging[]
+): AlertaStock[] {
+  const deProductos: AlertaStock[] = productos
+    .filter((p) => stockStatus(p.stock, p.stockMinimo) !== "en-stock")
+    .map((p) => ({
+      id: p.id,
+      nombre: p.nombre,
+      codigo: p.codigo,
+      stock: p.stock,
+      stockMinimo: p.stockMinimo,
+      tipo: "producto",
+    }));
+  const dePackaging: AlertaStock[] = packaging
+    .filter((p) => stockStatus(p.stock, p.stockMinimo) !== "en-stock")
+    .map((p) => ({
+      id: p.id,
+      nombre: p.nombre,
+      codigo: p.codigo,
+      stock: p.stock,
+      stockMinimo: p.stockMinimo,
+      tipo: "packaging",
+    }));
+
+  return [...deProductos, ...dePackaging].sort((a, b) => {
+    const agotadoA = a.stock <= 0;
+    const agotadoB = b.stock <= 0;
+    if (agotadoA !== agotadoB) return agotadoA ? -1 : 1;
+    return a.stock - b.stock;
+  });
 }
 
 export function cn(...classes: Array<string | false | null | undefined>) {

@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import ProtectedRoute from "@/components/Auth/ProtectedRoute";
 import Sidebar from "@/components/Sidebar";
 import Topbar from "@/components/Topbar";
-import { ensureSeedData } from "@/lib/db";
+import { ensurePackagingSeedData, ensureSeedData } from "@/lib/db";
 import { useAuth } from "@/hooks/useAuth";
 
 const TITLES: Record<string, string> = {
@@ -25,6 +25,9 @@ function SeedRunner() {
     if (user) {
       ensureSeedData().catch((error) => {
         console.error("No se pudo inicializar la base de datos:", error);
+      });
+      ensurePackagingSeedData().catch((error) => {
+        console.error("No se pudo inicializar el packaging:", error);
       });
     }
   }, [user]);

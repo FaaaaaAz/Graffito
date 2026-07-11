@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import ProductSearcher from "@/components/POS/ProductSearcher";
 import GrabadoOptions from "@/components/POS/GrabadoOptions";
@@ -8,15 +8,33 @@ import POSCart from "@/components/POS/POSCart";
 import PaymentModal from "@/components/POS/PaymentModal";
 import { useProducts } from "@/hooks/useProducts";
 import { useCategories } from "@/hooks/useCategories";
+import { usePackaging } from "@/hooks/usePackaging";
 import { useAuth } from "@/hooks/useAuth";
 import { createVenta } from "@/lib/db";
-import { resizeGrabadoParaCantidad } from "@/lib/utils";
-import type { CartItem, GrabadoInfo, MetodoPago, Producto } from "@/lib/types";
+import {
+  packagingPorId,
+  resizeGrabadoParaCantidad,
+  vinculosPorProducto,
+} from "@/lib/utils";
+import type {
+  CartItem,
+  CartPackagingLine,
+  GrabadoInfo,
+  MetodoPago,
+  Producto,
+} from "@/lib/types";
 
 export default function POSPage() {
   const { productos, loading } = useProducts();
   const { categorias } = useCategories();
+  const { packaging, vinculos } = usePackaging();
   const { user } = useAuth();
+
+  const packagingPorIdMap = useMemo(() => packagingPorId(packaging), [packaging]);
+  const vinculosPorProductoMap = useMemo(
+    () => vinculosPorProducto(vinculos),
+    [vinculos]
+  );
 
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -41,6 +59,21 @@ export default function POSPage() {
             : item
         );
       }
+      const vinculo = vinculosPorProductoMap.get(producto.codigo);
+      const packagingInicial: CartPackagingLine[] = (vinculo?.packaging ?? [])
+        .map((v): CartPackagingLine | null => {
+          const pkg = packagingPorIdMap.get(v.packageId);
+          if (!pkg) return null;
+          return {
+            packageId: pkg.id,
+            codigo: pkg.codigo,
+            nombre: pkg.nombre,
+            imageUrl: pkg.imageUrl,
+            cantidadPorUnidad: v.cantidad,
+          };
+        })
+        .filter((p): p is CartPackagingLine => p !== null);
+
       const nuevo: CartItem = {
         productoId: producto.id,
         codigo: producto.codigo,
@@ -52,11 +85,58 @@ export default function POSPage() {
         imageUrl: producto.imageUrl,
         tipo: producto.tipo,
         grabado: { modo: "ninguno" },
+        packaging: packagingInicial,
       };
       return [...prev, nuevo];
     });
     setSelectedId(producto.id);
     toast.success(`${producto.nombre} agregado al carrito`, { duration: 2200 });
+  }
+
+  function handleRemovePackaging(productoId: string, packageId: string) {
+    setCart((prev) =>
+      prev.map((item) =>
+        item.productoId === productoId
+          ? {
+              ...item,
+              packaging: item.packaging.filter((p) => p.packageId !== packageId),
+            }
+          : item
+      )
+    );
+  }
+
+  function handleAddPackaging(
+    productoId: string,
+    packageId: string,
+    cantidad: number
+  ) {
+    const pkg = packagingPorIdMap.get(packageId);
+    if (!pkg) return;
+    setCart((prev) =>
+      prev.map((item) => {
+        if (item.productoId !== productoId) return item;
+        const existing = item.packaging.find((p) => p.packageId === packageId);
+        const packaging = existing
+          ? item.packaging.map((p) =>
+              p.packageId === packageId
+                ? { ...p, cantidadPorUnidad: p.cantidadPorUnidad + cantidad }
+                : p
+            )
+          : [
+              ...item.packaging,
+              {
+                packageId: pkg.id,
+                codigo: pkg.codigo,
+                nombre: pkg.nombre,
+                imageUrl: pkg.imageUrl,
+                cantidadPorUnidad: cantidad,
+              },
+            ];
+        return { ...item, packaging };
+      })
+    );
+    toast.success(`${pkg.nombre} agregado`, { duration: 1800 });
   }
 
   function handleIncrement(productoId: string) {
@@ -116,6 +196,10 @@ export default function POSPage() {
           productoId: item.productoId,
           cantidad: item.cantidad,
           grabado: item.grabado,
+          packaging: item.packaging.map((p) => ({
+            packageId: p.packageId,
+            cantidad: p.cantidadPorUnidad * item.cantidad,
+          })),
         })),
         metodoPago,
         cliente,
@@ -165,6 +249,9 @@ export default function POSPage() {
           onIncrement={handleIncrement}
           onDecrement={handleDecrement}
           onRemove={handleRemove}
+          packagingCatalogo={packaging}
+          onRemovePackaging={handleRemovePackaging}
+          onAddPackaging={handleAddPackaging}
           metodoPago={metodoPago}
           onMetodoPagoChange={setMetodoPago}
           cliente={cliente}

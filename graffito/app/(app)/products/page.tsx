@@ -5,22 +5,28 @@ import { Plus, Search } from "lucide-react";
 import toast from "react-hot-toast";
 import ProductGrid from "@/components/Products/ProductGrid";
 import ComboGrid from "@/components/Products/ComboGrid";
+import PackagingGrid from "@/components/Products/PackagingGrid";
 import ProductModal from "@/components/Products/ProductModal";
+import AdjustmentModal from "@/components/Inventory/AdjustmentModal";
 import ConfirmDialog from "@/components/Common/ConfirmDialog";
 import Loading from "@/components/Common/Loading";
 import { useProducts } from "@/hooks/useProducts";
 import { useCategories } from "@/hooks/useCategories";
 import { useSettings } from "@/hooks/useSettings";
-import { deleteProducto } from "@/lib/db";
+import { usePackaging } from "@/hooks/usePackaging";
+import { useAuth } from "@/hooks/useAuth";
+import { adjustPackagingStock, deleteProducto } from "@/lib/db";
 import { cn, productosPorCodigo } from "@/lib/utils";
-import type { Producto } from "@/lib/types";
+import type { Producto, ProductoPackaging, TipoMovimiento } from "@/lib/types";
 
-type Tab = "productos" | "combos";
+type Tab = "productos" | "combos" | "packaging";
 
 export default function ProductsPage() {
   const { productos, loading } = useProducts();
   const { categorias } = useCategories();
   const { configuracion } = useSettings();
+  const { packaging, loading: loadingPackaging } = usePackaging();
+  const { user } = useAuth();
 
   const [tab, setTab] = useState<Tab>("productos");
   const [search, setSearch] = useState("");
@@ -29,6 +35,11 @@ export default function ProductsPage() {
   const [editing, setEditing] = useState<Producto | null>(null);
   const [toDelete, setToDelete] = useState<Producto | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [adjustingPackaging, setAdjustingPackaging] = useState<{
+    packaging: ProductoPackaging;
+    mode: "entrada" | "salida";
+  } | null>(null);
+  const [submittingPackaging, setSubmittingPackaging] = useState(false);
 
   const productosSimples = useMemo(
     () => productos.filter((p) => p.tipo !== "combo"),
@@ -41,7 +52,7 @@ export default function ProductsPage() {
   const porCodigo = useMemo(() => productosPorCodigo(productos), [productos]);
 
   const filtered = useMemo(() => {
-    const base = tab === "productos" ? productosSimples : combos;
+    const base = tab === "combos" ? combos : productosSimples;
     const term = search.trim().toLowerCase();
     return base.filter((p) => {
       const matchesTerm =
@@ -55,6 +66,16 @@ export default function ProductsPage() {
       return matchesTerm && matchesCategoria;
     });
   }, [tab, productosSimples, combos, search, categoriaFiltro]);
+
+  const filteredPackaging = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return packaging.filter(
+      (p) =>
+        !term ||
+        p.nombre.toLowerCase().includes(term) ||
+        p.codigo.toLowerCase().includes(term)
+    );
+  }, [packaging, search]);
 
   const combosQueUsan = useMemo(() => {
     if (!toDelete) return [];
@@ -100,6 +121,34 @@ export default function ProductsPage() {
     }
   }
 
+  async function handleSubmitPackaging(
+    cantidad: number,
+    tipo: TipoMovimiento,
+    notas: string
+  ) {
+    if (!adjustingPackaging || !user) return;
+    setSubmittingPackaging(true);
+    try {
+      const delta =
+        adjustingPackaging.mode === "entrada" ? cantidad : -cantidad;
+      await adjustPackagingStock({
+        packageId: adjustingPackaging.packaging.id,
+        delta,
+        tipo,
+        notas,
+        usuarioId: user.uid,
+      });
+      toast.success("Stock actualizado correctamente");
+      setAdjustingPackaging(null);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "No se pudo ajustar el stock"
+      );
+    } finally {
+      setSubmittingPackaging(false);
+    }
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex gap-1.5 rounded-lg border border-panel-2 bg-panel p-1 w-fit">
@@ -107,6 +156,7 @@ export default function ProductsPage() {
           [
             { id: "productos" as const, label: "Productos" },
             { id: "combos" as const, label: "Combos" },
+            { id: "packaging" as const, label: "Packaging" },
           ]
         ).map((t) => (
           <button
@@ -155,16 +205,32 @@ export default function ProductsPage() {
           )}
         </div>
 
-        <button
-          onClick={openCreate}
-          className="flex items-center justify-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-canvas transition-all duration-300 hover:brightness-95"
-        >
-          <Plus className="h-4 w-4" />
-          {tab === "productos" ? "Nuevo producto" : "Nuevo combo"}
-        </button>
+        {tab !== "packaging" && (
+          <button
+            onClick={openCreate}
+            className="flex items-center justify-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-canvas transition-all duration-300 hover:brightness-95"
+          >
+            <Plus className="h-4 w-4" />
+            {tab === "productos" ? "Nuevo producto" : "Nuevo combo"}
+          </button>
+        )}
       </div>
 
-      {loading ? (
+      {tab === "packaging" ? (
+        loadingPackaging ? (
+          <Loading label="Cargando packaging..." />
+        ) : (
+          <PackagingGrid
+            packaging={filteredPackaging}
+            onRequestIncrease={(pkg) =>
+              setAdjustingPackaging({ packaging: pkg, mode: "entrada" })
+            }
+            onRequestDecrease={(pkg) =>
+              setAdjustingPackaging({ packaging: pkg, mode: "salida" })
+            }
+          />
+        )
+      ) : loading ? (
         <Loading label="Cargando productos..." />
       ) : tab === "productos" ? (
         <ProductGrid productos={filtered} onEdit={openEdit} onDelete={setToDelete} />
@@ -186,6 +252,16 @@ export default function ProductsPage() {
           defaultEsCombo={tab === "combos"}
           onClose={() => setModalOpen(false)}
           onSaved={() => setModalOpen(false)}
+        />
+      )}
+
+      {adjustingPackaging && (
+        <AdjustmentModal
+          producto={adjustingPackaging.packaging}
+          mode={adjustingPackaging.mode}
+          submitting={submittingPackaging}
+          onClose={() => setAdjustingPackaging(null)}
+          onSubmit={handleSubmitPackaging}
         />
       )}
 

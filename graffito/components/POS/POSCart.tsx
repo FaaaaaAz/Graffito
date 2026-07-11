@@ -1,12 +1,96 @@
 "use client";
 
 import { useState } from "react";
-import { Minus, Plus, ShoppingCart, Trash2 } from "lucide-react";
+import { Minus, Package, Plus, ShoppingCart, Trash2, X } from "lucide-react";
 import toast from "react-hot-toast";
-import type { CartItem, MetodoPago } from "@/lib/types";
+import type { CartItem, MetodoPago, ProductoPackaging } from "@/lib/types";
 import { cn, formatCurrency, tieneGrabado } from "@/lib/utils";
+import PackagingModal from "./PackagingModal";
 
 const METODOS: MetodoPago[] = ["Efectivo", "Tarjeta", "Transferencia"];
+
+function PackagingBadge({
+  item,
+  packagingCatalogo,
+  onRemove,
+  onAdd,
+}: {
+  item: CartItem;
+  packagingCatalogo: ProductoPackaging[];
+  onRemove: (packageId: string) => void;
+  onAdd: (packageId: string, cantidad: number) => void;
+}) {
+  const [modalOpen, setModalOpen] = useState(false);
+
+  return (
+    <div
+      className="flex shrink-0 items-center gap-1"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="group/pkg relative">
+        <button
+          type="button"
+          className="relative rounded-md p-1 text-ink-soft transition-all duration-300 hover:bg-panel-2 hover:text-accent"
+        >
+          <Package className="h-3.5 w-3.5" />
+          {item.packaging.length > 0 && (
+            <span className="absolute -right-1 -top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-accent text-[9px] font-bold text-canvas">
+              {item.packaging.length}
+            </span>
+          )}
+        </button>
+
+        {item.packaging.length > 0 && (
+          <div className="invisible absolute bottom-full left-0 z-20 mb-2 w-56 rounded-lg border border-panel-2 bg-panel p-2.5 opacity-0 shadow-lg transition-all duration-150 group-hover/pkg:visible group-hover/pkg:opacity-100">
+            <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-ink-soft">
+              Packaging
+            </p>
+            <ul className="space-y-1">
+              {item.packaging.map((p) => (
+                <li
+                  key={p.packageId}
+                  className="flex items-center justify-between gap-2 text-xs text-ink"
+                >
+                  <span className="truncate">
+                    {p.nombre} ({p.cantidadPorUnidad * item.cantidad}x)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => onRemove(p.packageId)}
+                    className="shrink-0 rounded p-0.5 text-ink-soft hover:text-red-400"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+
+      <button
+        type="button"
+        onClick={() => setModalOpen(true)}
+        title="Agregar packaging"
+        className="rounded-md p-1 text-ink-soft transition-all duration-300 hover:bg-panel-2 hover:text-accent"
+      >
+        <Plus className="h-3 w-3" />
+      </button>
+
+      {modalOpen && (
+        <PackagingModal
+          itemNombre={item.nombre}
+          packagingCatalogo={packagingCatalogo}
+          onAdd={(packageId, cantidad) => {
+            onAdd(packageId, cantidad);
+            setModalOpen(false);
+          }}
+          onClose={() => setModalOpen(false)}
+        />
+      )}
+    </div>
+  );
+}
 
 export default function POSCart({
   items,
@@ -15,6 +99,9 @@ export default function POSCart({
   onIncrement,
   onDecrement,
   onRemove,
+  packagingCatalogo,
+  onRemovePackaging,
+  onAddPackaging,
   metodoPago,
   onMetodoPagoChange,
   cliente,
@@ -29,6 +116,9 @@ export default function POSCart({
   onIncrement: (productoId: string) => void;
   onDecrement: (productoId: string) => void;
   onRemove: (productoId: string) => void;
+  packagingCatalogo: ProductoPackaging[];
+  onRemovePackaging: (productoId: string, packageId: string) => void;
+  onAddPackaging: (productoId: string, packageId: string, cantidad: number) => void;
   metodoPago: MetodoPago;
   onMetodoPagoChange: (metodo: MetodoPago) => void;
   cliente: string;
@@ -108,16 +198,28 @@ export default function POSCart({
                       )}
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onRemove(item.productoId);
-                    }}
-                    className="shrink-0 rounded p-1 text-ink-soft hover:bg-panel-2 hover:text-red-400"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
+                  <div className="flex shrink-0 items-center gap-0.5">
+                    <PackagingBadge
+                      item={item}
+                      packagingCatalogo={packagingCatalogo}
+                      onRemove={(packageId) =>
+                        onRemovePackaging(item.productoId, packageId)
+                      }
+                      onAdd={(packageId, cantidad) =>
+                        onAddPackaging(item.productoId, packageId, cantidad)
+                      }
+                    />
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onRemove(item.productoId);
+                      }}
+                      className="rounded p-1 text-ink-soft hover:bg-panel-2 hover:text-red-400"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 </div>
 
                 <div className="mt-2 flex items-center justify-between">

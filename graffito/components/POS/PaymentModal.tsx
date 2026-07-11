@@ -56,6 +56,17 @@ export default function PaymentModal({
                       {linea.label}: &ldquo;{linea.value}&rdquo;
                     </p>
                   ))}
+                  {item.packaging.length > 0 && (
+                    <p className="truncate text-xs text-ink-soft">
+                      Packaging:{" "}
+                      {item.packaging
+                        .map(
+                          (p) =>
+                            `${p.nombre} (${p.cantidadPorUnidad * item.cantidad}x)`
+                        )
+                        .join(", ")}
+                    </p>
+                  )}
                 </div>
                 <span className="shrink-0 font-medium text-ink">
                   {formatCurrency(item.precioUnitario * item.cantidad)}

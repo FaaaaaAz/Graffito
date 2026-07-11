@@ -16,7 +16,8 @@ import {
 import { useSales } from "@/hooks/useSales";
 import { useReports } from "@/hooks/useReports";
 import { useInventory } from "@/hooks/useInventory";
-import { formatCurrency, stockStatus, truncateText } from "@/lib/utils";
+import { usePackaging } from "@/hooks/usePackaging";
+import { construirAlertasStock, formatCurrency, truncateText } from "@/lib/utils";
 import Loading from "@/components/Common/Loading";
 
 function useDayRange() {
@@ -53,13 +54,13 @@ export default function DashboardPage() {
   } = useReports(ultimos7Dias);
   const { productos, movimientos, loading: loadingInventario } =
     useInventory(10);
+  const { packaging, loading: loadingPackaging } = usePackaging();
   const productosSimples = productos.filter((p) => p.tipo !== "combo");
 
-  const alertasStock = productosSimples.filter(
-    (p) => stockStatus(p.stock, p.stockMinimo) !== "en-stock"
-  );
+  const alertasStock = construirAlertasStock(productosSimples, packaging);
 
-  const loading = loadingHoy || loadingReportes || loadingInventario;
+  const loading =
+    loadingHoy || loadingReportes || loadingInventario || loadingPackaging;
 
   if (loading) return <Loading label="Cargando dashboard..." />;
 
@@ -133,7 +134,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <CriticalStockAlerts productos={productosSimples} />
+      <CriticalStockAlerts alertas={alertasStock} />
     </div>
   );
 }

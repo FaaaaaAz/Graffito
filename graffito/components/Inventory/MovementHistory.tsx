@@ -62,6 +62,11 @@ export default function MovementHistory({
                   <div className="min-w-0">
                     <p className="truncate text-ink">
                       {mov.nombre} · {mov.codigo}
+                      {mov.esPackaging && (
+                        <span className="ml-1.5 rounded bg-accent/15 px-1.5 py-0.5 text-[9px] font-medium text-accent">
+                          Packaging
+                        </span>
+                      )}
                     </p>
                     <p className="text-xs text-ink-soft">
                       {formatDateTime(mov.fecha)} · Administrador
