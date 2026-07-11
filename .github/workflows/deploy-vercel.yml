@@ -50,6 +50,21 @@ jobs:
       - name: Pull Vercel environment information
         run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
 
+      - name: Diagnose pulled env file (no secrets printed)
+        run: |
+          FILE=".vercel/.env.production.local"
+          if [ -f "$FILE" ]; then
+            echo "File exists, $(wc -l < "$FILE") lines."
+            grep -o '^[A-Z_]*=' "$FILE" | while read -r key; do
+              name="${key%=}"
+              len=$(grep "^${key}" "$FILE" | cut -d= -f2- | tr -d '\n' | wc -c)
+              echo "$name -> value length: $len"
+            done
+          else
+            echo "File does NOT exist at $FILE"
+            find .vercel -type f 2>/dev/null
+          fi
+
       - name: Build project artifacts
         run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
 
