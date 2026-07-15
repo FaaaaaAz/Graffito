@@ -14,6 +14,7 @@ import { createVenta } from "@/lib/db";
 import {
   packagingPorId,
   resizeGrabadoParaCantidad,
+  resizePackagingParaCantidad,
   vinculosPorProducto,
 } from "@/lib/utils";
 import type {
@@ -55,6 +56,7 @@ export default function POSPage() {
                 ...item,
                 cantidad,
                 grabado: resizeGrabadoParaCantidad(item.grabado, cantidad),
+                packaging: resizePackagingParaCantidad(item.packaging, cantidad),
               }
             : item
         );
@@ -70,6 +72,8 @@ export default function POSPage() {
             nombre: pkg.nombre,
             imageUrl: pkg.imageUrl,
             cantidadPorUnidad: v.cantidad,
+            cantidadTotal: v.cantidad,
+            manual: false,
           };
         })
         .filter((p): p is CartPackagingLine => p !== null);
@@ -117,26 +121,79 @@ export default function POSPage() {
       prev.map((item) => {
         if (item.productoId !== productoId) return item;
         const existing = item.packaging.find((p) => p.packageId === packageId);
-        const packaging = existing
-          ? item.packaging.map((p) =>
-              p.packageId === packageId
-                ? { ...p, cantidadPorUnidad: p.cantidadPorUnidad + cantidad }
-                : p
-            )
-          : [
-              ...item.packaging,
-              {
-                packageId: pkg.id,
-                codigo: pkg.codigo,
-                nombre: pkg.nombre,
-                imageUrl: pkg.imageUrl,
-                cantidadPorUnidad: cantidad,
-              },
-            ];
-        return { ...item, packaging };
+        if (existing) {
+          const packaging = item.packaging.map((p) => {
+            if (p.packageId !== packageId) return p;
+            if (p.manual) {
+              return { ...p, cantidadTotal: p.cantidadTotal + cantidad };
+            }
+            const cantidadPorUnidad = p.cantidadPorUnidad + cantidad;
+            return {
+              ...p,
+              cantidadPorUnidad,
+              cantidadTotal: cantidadPorUnidad * item.cantidad,
+            };
+          });
+          return { ...item, packaging };
+        }
+        return {
+          ...item,
+          packaging: [
+            ...item.packaging,
+            {
+              packageId: pkg.id,
+              codigo: pkg.codigo,
+              nombre: pkg.nombre,
+              imageUrl: pkg.imageUrl,
+              cantidadPorUnidad: cantidad,
+              cantidadTotal: cantidad * item.cantidad,
+              manual: false,
+            },
+          ],
+        };
       })
     );
     toast.success(`${pkg.nombre} agregado`, { duration: 1800 });
+  }
+
+  function handleIncrementPackaging(productoId: string, packageId: string) {
+    setCart((prev) =>
+      prev.map((item) => {
+        if (item.productoId !== productoId) return item;
+        return {
+          ...item,
+          packaging: item.packaging.map((p) =>
+            p.packageId === packageId
+              ? { ...p, cantidadTotal: p.cantidadTotal + 1, manual: true }
+              : p
+          ),
+        };
+      })
+    );
+  }
+
+  function handleDecrementPackaging(productoId: string, packageId: string) {
+    setCart((prev) =>
+      prev.map((item) => {
+        if (item.productoId !== productoId) return item;
+        const linea = item.packaging.find((p) => p.packageId === packageId);
+        if (!linea) return item;
+        if (linea.cantidadTotal <= 1) {
+          return {
+            ...item,
+            packaging: item.packaging.filter((p) => p.packageId !== packageId),
+          };
+        }
+        return {
+          ...item,
+          packaging: item.packaging.map((p) =>
+            p.packageId === packageId
+              ? { ...p, cantidadTotal: p.cantidadTotal - 1, manual: true }
+              : p
+          ),
+        };
+      })
+    );
   }
 
   function handleIncrement(productoId: string) {
@@ -148,6 +205,7 @@ export default function POSPage() {
           ...item,
           cantidad,
           grabado: resizeGrabadoParaCantidad(item.grabado, cantidad),
+          packaging: resizePackagingParaCantidad(item.packaging, cantidad),
         };
       })
     );
@@ -167,6 +225,7 @@ export default function POSPage() {
               ...item,
               cantidad,
               grabado: resizeGrabadoParaCantidad(item.grabado, cantidad),
+              packaging: resizePackagingParaCantidad(item.packaging, cantidad),
             }
           : item
       );
@@ -198,7 +257,7 @@ export default function POSPage() {
           grabado: item.grabado,
           packaging: item.packaging.map((p) => ({
             packageId: p.packageId,
-            cantidad: p.cantidadPorUnidad * item.cantidad,
+            cantidad: p.cantidadTotal,
           })),
         })),
         metodoPago,
@@ -252,6 +311,8 @@ export default function POSPage() {
           packagingCatalogo={packaging}
           onRemovePackaging={handleRemovePackaging}
           onAddPackaging={handleAddPackaging}
+          onIncrementPackaging={handleIncrementPackaging}
+          onDecrementPackaging={handleDecrementPackaging}
           metodoPago={metodoPago}
           onMetodoPagoChange={setMetodoPago}
           cliente={cliente}

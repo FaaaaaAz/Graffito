@@ -60,10 +60,7 @@ export default function PaymentModal({
                     <p className="truncate text-xs text-ink-soft">
                       Packaging:{" "}
                       {item.packaging
-                        .map(
-                          (p) =>
-                            `${p.nombre} (${p.cantidadPorUnidad * item.cantidad}x)`
-                        )
+                        .map((p) => `${p.nombre} (${p.cantidadTotal}x)`)
                         .join(", ")}
                     </p>
                   )}

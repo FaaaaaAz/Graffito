@@ -1,5 +1,6 @@
 import type { Timestamp } from "firebase/firestore";
 import type {
+  CartPackagingLine,
   EstadoStock,
   GrabadoInfo,
   GrabadoTexto,
@@ -89,6 +90,21 @@ export function resizeGrabadoParaCantidad(
   const unidades = grabado.unidades.slice(0, cantidad);
   while (unidades.length < cantidad) unidades.push(grabadoTextoVacio());
   return { modo: "individual", unidades };
+}
+
+/**
+ * Keeps a cart line's packaging quantities proportional to its product
+ * quantity (e.g. 2 pens -> 2 boxes + 2 bags). Lines the admin has manually
+ * edited (`manual: true`) are left untouched — a manual override is sticky
+ * and no longer auto-scales, by design.
+ */
+export function resizePackagingParaCantidad(
+  packaging: CartPackagingLine[],
+  cantidad: number
+): CartPackagingLine[] {
+  return packaging.map((p) =>
+    p.manual ? p : { ...p, cantidadTotal: p.cantidadPorUnidad * cantidad }
+  );
 }
 
 /**

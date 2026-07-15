@@ -1,22 +1,26 @@
 "use client";
 
 import { useState } from "react";
-import { Minus, Package, Plus, ShoppingCart, Trash2, X } from "lucide-react";
+import { Minus, Package, Plus, ShoppingCart, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
 import type { CartItem, MetodoPago, ProductoPackaging } from "@/lib/types";
 import { cn, formatCurrency, tieneGrabado } from "@/lib/utils";
-import PackagingModal from "./PackagingModal";
+import PackagingDetailModal from "./PackagingDetailModal";
 
 const METODOS: MetodoPago[] = ["Efectivo", "Tarjeta", "Transferencia"];
 
 function PackagingBadge({
   item,
   packagingCatalogo,
+  onIncrement,
+  onDecrement,
   onRemove,
   onAdd,
 }: {
   item: CartItem;
   packagingCatalogo: ProductoPackaging[];
+  onIncrement: (packageId: string) => void;
+  onDecrement: (packageId: string) => void;
   onRemove: (packageId: string) => void;
   onAdd: (packageId: string, cantidad: number) => void;
 }) {
@@ -24,67 +28,31 @@ function PackagingBadge({
 
   return (
     <div
-      className="flex shrink-0 items-center gap-1"
+      className="flex shrink-0 items-center"
       onClick={(e) => e.stopPropagation()}
     >
-      <div className="group/pkg relative">
-        <button
-          type="button"
-          className="relative rounded-md p-1 text-ink-soft transition-all duration-300 hover:bg-panel-2 hover:text-accent"
-        >
-          <Package className="h-3.5 w-3.5" />
-          {item.packaging.length > 0 && (
-            <span className="absolute -right-1 -top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-accent text-[9px] font-bold text-canvas">
-              {item.packaging.length}
-            </span>
-          )}
-        </button>
-
-        {item.packaging.length > 0 && (
-          <div className="invisible absolute bottom-full left-0 z-20 mb-2 w-56 rounded-lg border border-panel-2 bg-panel p-2.5 opacity-0 shadow-lg transition-all duration-150 group-hover/pkg:visible group-hover/pkg:opacity-100">
-            <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-ink-soft">
-              Packaging
-            </p>
-            <ul className="space-y-1">
-              {item.packaging.map((p) => (
-                <li
-                  key={p.packageId}
-                  className="flex items-center justify-between gap-2 text-xs text-ink"
-                >
-                  <span className="truncate">
-                    {p.nombre} ({p.cantidadPorUnidad * item.cantidad}x)
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => onRemove(p.packageId)}
-                    className="shrink-0 rounded p-0.5 text-ink-soft hover:text-red-400"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </div>
-
       <button
         type="button"
         onClick={() => setModalOpen(true)}
-        title="Agregar packaging"
-        className="rounded-md p-1 text-ink-soft transition-all duration-300 hover:bg-panel-2 hover:text-accent"
+        title="Ver packaging"
+        className="relative rounded-md p-1 text-ink-soft transition-all duration-300 hover:bg-panel-2 hover:text-accent"
       >
-        <Plus className="h-3 w-3" />
+        <Package className="h-3.5 w-3.5" />
+        {item.packaging.length > 0 && (
+          <span className="absolute -right-1 -top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-accent text-[9px] font-bold text-canvas">
+            {item.packaging.length}
+          </span>
+        )}
       </button>
 
       {modalOpen && (
-        <PackagingModal
-          itemNombre={item.nombre}
+        <PackagingDetailModal
+          item={item}
           packagingCatalogo={packagingCatalogo}
-          onAdd={(packageId, cantidad) => {
-            onAdd(packageId, cantidad);
-            setModalOpen(false);
-          }}
+          onIncrement={onIncrement}
+          onDecrement={onDecrement}
+          onRemove={onRemove}
+          onAdd={onAdd}
           onClose={() => setModalOpen(false)}
         />
       )}
@@ -102,6 +70,8 @@ export default function POSCart({
   packagingCatalogo,
   onRemovePackaging,
   onAddPackaging,
+  onIncrementPackaging,
+  onDecrementPackaging,
   metodoPago,
   onMetodoPagoChange,
   cliente,
@@ -119,6 +89,8 @@ export default function POSCart({
   packagingCatalogo: ProductoPackaging[];
   onRemovePackaging: (productoId: string, packageId: string) => void;
   onAddPackaging: (productoId: string, packageId: string, cantidad: number) => void;
+  onIncrementPackaging: (productoId: string, packageId: string) => void;
+  onDecrementPackaging: (productoId: string, packageId: string) => void;
   metodoPago: MetodoPago;
   onMetodoPagoChange: (metodo: MetodoPago) => void;
   cliente: string;
@@ -202,6 +174,12 @@ export default function POSCart({
                     <PackagingBadge
                       item={item}
                       packagingCatalogo={packagingCatalogo}
+                      onIncrement={(packageId) =>
+                        onIncrementPackaging(item.productoId, packageId)
+                      }
+                      onDecrement={(packageId) =>
+                        onDecrementPackaging(item.productoId, packageId)
+                      }
                       onRemove={(packageId) =>
                         onRemovePackaging(item.productoId, packageId)
                       }
@@ -260,14 +238,14 @@ export default function POSCart({
             <p className="mb-1.5 text-xs font-medium text-ink-soft">
               Método de pago
             </p>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-3 gap-1.5">
               {METODOS.map((metodo) => (
                 <button
                   key={metodo}
                   type="button"
                   onClick={() => onMetodoPagoChange(metodo)}
                   className={cn(
-                    "rounded-lg border px-2 py-2 text-xs font-medium transition-all duration-300",
+                    "flex min-h-[2.25rem] items-center justify-center rounded-lg border px-1.5 py-2 text-center text-[11px] font-medium leading-tight transition-all duration-300",
                     metodoPago === metodo
                       ? "border-accent bg-accent text-canvas"
                       : "border-panel-2 bg-canvas-soft text-ink-soft hover:text-ink"

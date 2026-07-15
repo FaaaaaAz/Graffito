@@ -187,11 +187,14 @@ export interface ConfiguracionGeneral {
 }
 
 /**
- * A packaging type attached to a cart line. `cantidadPorUnidad` is a rate
- * (units of packaging per 1 unit of the product), so the total consumed
- * (`cantidadPorUnidad * item.cantidad`) automatically stays in sync as the
- * cart line's quantity changes — no separate resize step needed, mirroring
- * how `resizeGrabadoParaCantidad` keeps engraving in sync.
+ * A packaging type attached to a cart line. `cantidadTotal` is the
+ * authoritative quantity actually consumed at checkout. While `manual` is
+ * false it's kept in sync with the product's `cantidad` via
+ * `cantidadPorUnidad` (units of packaging per 1 unit of product) — see
+ * `resizePackagingParaCantidad` in lib/utils.ts, which mirrors how
+ * `resizeGrabadoParaCantidad` keeps engraving in sync. Once the admin edits
+ * a line's quantity directly (+/- in the packaging modal), `manual` flips to
+ * true and that line stops auto-scaling — it becomes a fixed override.
  */
 export interface CartPackagingLine {
   packageId: string;
@@ -199,6 +202,8 @@ export interface CartPackagingLine {
   nombre: string;
   imageUrl: string;
   cantidadPorUnidad: number;
+  cantidadTotal: number;
+  manual: boolean;
 }
 
 export interface CartItem {

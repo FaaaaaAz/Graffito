@@ -1,0 +1,41 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find lib *)",
+      "Bash(npm install *)",
+      "Skill(dataviz)",
+      "Skill(dataviz:*)",
+      "Bash(node scripts/validate_palette.js \"#3987e5,#199e70,#c98500,#008300,#9085e9,#e66767,#d55181,#d95926\" --mode dark --surface \"#1E1E1E\")",
+      "Bash(npx eslint *)",
+      "Bash(npm run *)",
+      "Skill(run)",
+      "Skill(run:*)",
+      "Bash(npx --yes playwright --version)",
+      "Bash(node -e \"try{require.resolve\\('playwright'\\); console.log\\('playwright resolvable'\\)}catch\\(e\\){console.log\\('not resolvable: '+e.message\\)}\")",
+      "Bash(npx --yes playwright install chromium --dry-run)",
+      "Bash(npx --yes playwright install chromium)",
+      "Bash(npx --yes -p playwright node -e \"const {chromium} = require\\('playwright'\\); console.log\\(typeof chromium\\)\")",
+      "Bash(mkdir -p \"/c/Users/Fabian/AppData/Local/Temp/claude/c--Users-Fabian-Desktop-UPB-Proyectos-personales-Paginas-Web-Graffito/0cd9a710-e6bd-4227-bd34-f7798d32efdb/scratchpad/pw-test\")",
+      "Read(//c/Users/Fabian/AppData/Local/Temp/claude/c--Users-Fabian-Desktop-UPB-Proyectos-personales-Paginas-Web-Graffito/0cd9a710-e6bd-4227-bd34-f7798d32efdb/scratchpad/**)",
+      "Bash(npm init *)",
+      "Read(//c/Users/Fabian/AppData/Local/Temp/claude/c--Users-Fabian-Desktop-UPB-Proyectos-personales-Paginas-Web-Graffito/0cd9a710-e6bd-4227-bd34-f7798d32efdb/scratchpad/pw-test/**)",
+      "Bash(mkdir -p screenshots)",
+      "Bash(node check.js)",
+      "Bash(node login.js)",
+      "Bash(node create-admin.js)",
+      "Bash(node golden-path.js)",
+      "Bash(node inspect.js)",
+      "Bash(node cleanup.js)",
+      "Bash(node sale-flow.js)",
+      "Bash(node debug-pos.js)",
+      "Bash(node debug-nav.js)",
+      "Bash(node debug-nav2.js)",
+      "Bash(node debug-nav3.js)",
+      "Bash(tasklist)",
+      "Bash(taskkill //F //IM chrome.exe //T)",
+      "Bash(node debug-click.js)",
+      "Bash(node debug-click2.js)",
+      "Bash(node debug-bounce.js)"
+    ]
+  }
+}
