@@ -4,6 +4,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  increment,
   limit,
   onSnapshot,
   orderBy,
@@ -20,7 +21,7 @@ import {
   type QueryDocumentSnapshot,
 } from "firebase/firestore";
 import { db } from "./firebase";
-import { sanitizeForFirestore } from "./utils";
+import { dateKey, sanitizeForFirestore } from "./utils";
 import type {
   Categoria,
   CierreDiario,
@@ -444,6 +445,7 @@ export async function createVenta(input: NuevaVentaInput) {
         fecha: serverTimestamp(),
         usuarioId: input.usuarioId,
         notas: "",
+        ventaId: ventaRef.id,
       });
     });
 
@@ -467,6 +469,7 @@ export async function createVenta(input: NuevaVentaInput) {
         usuarioId: input.usuarioId,
         notas: "",
         esPackaging: true,
+        ventaId: ventaRef.id,
       });
     });
 
@@ -490,6 +493,103 @@ export function subscribeVentasRango(
   return onSnapshot(q, (snap) => {
     cb(snap.docs.map((d) => withId<Venta>(d)));
   });
+}
+
+export interface EliminarVentaResult {
+  ventaId: string;
+  productsReverted: number;
+  packagingReverted: number;
+}
+
+/**
+ * Deletes a sale and reverts everything it did: product/combo stock,
+ * packaging stock, and the movimientosStock entries it created — then
+ * writes an audit record of the deletion. Restricted to sales made today,
+ * so cierres diarios for past days stay stable.
+ *
+ * Reverting is driven entirely by the movimientosStock docs tagged with
+ * this venta's id (see `ventaId` in createVenta), not by re-deriving
+ * quantities from `venta.items`. That's deliberate: for a combo sale, the
+ * items array records the combo itself, but the actual stock deduction was
+ * already flattened onto its base products (and merged with any matching
+ * direct purchases in the same cart) at sale time — the movimientosStock
+ * entries are the only accurate record of what was actually decremented,
+ * so reversing exactly those is correct regardless of whether the combo's
+ * own definition has changed since.
+ */
+export async function eliminarVenta(
+  ventaId: string,
+  usuarioId: string
+): Promise<EliminarVentaResult> {
+  const ventaRef = doc(db, "ventas", ventaId);
+  const ventaSnap = await getDoc(ventaRef);
+  if (!ventaSnap.exists()) {
+    throw new Error("Venta no encontrada.");
+  }
+  const venta = ventaSnap.data() as Venta;
+  if (!venta.fecha) {
+    throw new Error("La venta no tiene una fecha válida.");
+  }
+  if (dateKey(venta.fecha.toDate()) !== dateKey(new Date())) {
+    throw new Error("Solo se pueden eliminar ventas registradas el día de hoy.");
+  }
+
+  const movimientosSnap = await getDocs(
+    query(collection(db, "movimientosStock"), where("ventaId", "==", ventaId))
+  );
+
+  const reversiones = new Map<
+    string,
+    { ref: DocumentReference; delta: number; esPackaging: boolean }
+  >();
+  movimientosSnap.forEach((movSnap) => {
+    const mov = movSnap.data() as MovimientoStock;
+    const esPackaging = Boolean(mov.esPackaging);
+    const coleccion = esPackaging ? "packaging" : "productos";
+    const key = `${coleccion}/${mov.productoId}`;
+    const existing = reversiones.get(key);
+    reversiones.set(key, {
+      ref: doc(db, coleccion, mov.productoId),
+      delta: (existing?.delta ?? 0) + mov.cantidad,
+      esPackaging,
+    });
+  });
+
+  await runTransaction(db, async (transaction) => {
+    const freshVentaSnap = await transaction.get(ventaRef);
+    if (!freshVentaSnap.exists()) {
+      throw new Error("La venta ya fue eliminada.");
+    }
+
+    reversiones.forEach(({ ref, delta, esPackaging }) => {
+      transaction.update(ref, {
+        stock: increment(delta),
+        ...(esPackaging ? { actualizadoEn: serverTimestamp() } : {}),
+      });
+    });
+
+    movimientosSnap.forEach((movSnap) => {
+      transaction.delete(movSnap.ref);
+    });
+
+    const auditRef = doc(collection(db, "auditoria"));
+    transaction.set(auditRef, {
+      tipo: "venta-eliminada",
+      ventaId,
+      ventaOriginal: sanitizeForFirestore(venta),
+      fecha: serverTimestamp(),
+      usuarioId,
+    });
+
+    transaction.delete(ventaRef);
+  });
+
+  const valores = Array.from(reversiones.values());
+  return {
+    ventaId,
+    productsReverted: valores.filter((r) => !r.esPackaging).length,
+    packagingReverted: valores.filter((r) => r.esPackaging).length,
+  };
 }
 
 // ---------------------------------------------------------------------------

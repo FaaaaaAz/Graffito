@@ -2,14 +2,18 @@
 
 import { useMemo, useState } from "react";
 import { CreditCard, Package, Receipt, TrendingUp } from "lucide-react";
+import toast from "react-hot-toast";
 import StatCard from "@/components/Dashboard/StatCard";
 import SalesTable from "@/components/Sales/SalesTable";
 import CashierClosing from "@/components/Sales/CashierClosing";
+import DeleteSaleModal from "@/components/Sales/DeleteSaleModal";
 import ExportButton from "@/components/Reports/ExportButton";
 import Loading from "@/components/Common/Loading";
 import { useSales } from "@/hooks/useSales";
+import { useAuth } from "@/hooks/useAuth";
+import { eliminarVenta } from "@/lib/db";
 import { computeVentasStats, dateKey, formatCurrency } from "@/lib/utils";
-import type { MetodoPago } from "@/lib/types";
+import type { MetodoPago, Venta } from "@/lib/types";
 
 const METODOS: Array<MetodoPago | "Todos"> = [
   "Todos",
@@ -19,10 +23,12 @@ const METODOS: Array<MetodoPago | "Todos"> = [
 ];
 
 export default function SalesPage() {
+  const { user } = useAuth();
   const today = dateKey(new Date());
   const [fechaInicio, setFechaInicio] = useState(today);
   const [fechaFin, setFechaFin] = useState(today);
   const [metodoPago, setMetodoPago] = useState<MetodoPago | "Todos">("Todos");
+  const [ventaAEliminar, setVentaAEliminar] = useState<Venta | null>(null);
 
   const rango = useMemo(() => {
     const inicio = new Date(`${fechaInicio}T00:00:00`);
@@ -45,6 +51,19 @@ export default function SalesPage() {
     () => computeVentasStats(ventasFiltradas),
     [ventasFiltradas]
   );
+
+  async function handleConfirmDelete() {
+    if (!ventaAEliminar || !user) return;
+    try {
+      await eliminarVenta(ventaAEliminar.id, user.uid);
+      toast.success("Venta eliminada correctamente. Stock revertido.");
+      setVentaAEliminar(null);
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Error al eliminar la venta"
+      );
+    }
+  }
 
   return (
     <div className="space-y-5">
@@ -129,7 +148,15 @@ export default function SalesPage() {
       {loading ? (
         <Loading label="Cargando ventas..." />
       ) : (
-        <SalesTable ventas={ventasFiltradas} />
+        <SalesTable ventas={ventasFiltradas} onDelete={setVentaAEliminar} />
+      )}
+
+      {ventaAEliminar && (
+        <DeleteSaleModal
+          venta={ventaAEliminar}
+          onConfirm={handleConfirmDelete}
+          onCancel={() => setVentaAEliminar(null)}
+        />
       )}
     </div>
   );

@@ -1,12 +1,21 @@
 "use client";
 
 import { Fragment, useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Trash2 } from "lucide-react";
 import type { Venta } from "@/lib/types";
-import { cn, formatCurrency, formatDateTime, grabadoLineas } from "@/lib/utils";
+import { cn, dateKey, formatCurrency, formatDateTime, grabadoLineas } from "@/lib/utils";
 
-export default function SalesTable({ ventas }: { ventas: Venta[] }) {
+export default function SalesTable({
+  ventas,
+  onDelete,
+}: {
+  ventas: Venta[];
+  /** Omit to render a read-only table (e.g. the Reports page) — the Acciones column is hidden entirely. */
+  onDelete?: (venta: Venta) => void;
+}) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const hoy = dateKey(new Date());
+  const columnCount = onDelete ? 9 : 8;
 
   if (ventas.length === 0) {
     return (
@@ -18,7 +27,7 @@ export default function SalesTable({ ventas }: { ventas: Venta[] }) {
 
   return (
     <div className="overflow-x-auto rounded-xl border border-panel-2 bg-panel shadow-sm">
-      <table className="w-full min-w-[860px] text-left text-sm">
+      <table className="w-full min-w-[940px] text-left text-sm">
         <thead>
           <tr className="border-b border-panel-2 text-xs uppercase tracking-wide text-ink-soft">
             <th className="px-4 py-3 font-medium">Fecha</th>
@@ -28,6 +37,9 @@ export default function SalesTable({ ventas }: { ventas: Venta[] }) {
             <th className="px-4 py-3 font-medium">Cliente</th>
             <th className="px-4 py-3 font-medium">Celular</th>
             <th className="px-4 py-3 text-right font-medium">Total</th>
+            {onDelete && (
+              <th className="px-4 py-3 text-right font-medium">Acciones</th>
+            )}
             <th className="w-10 px-4 py-3" />
           </tr>
         </thead>
@@ -35,6 +47,7 @@ export default function SalesTable({ ventas }: { ventas: Venta[] }) {
           {ventas.map((venta) => {
             const expanded = expandedId === venta.id;
             const cantidadTotal = venta.items.reduce((s, i) => s + i.cantidad, 0);
+            const esDeHoy = venta.fecha ? dateKey(venta.fecha.toDate()) === hoy : false;
             return (
               <Fragment key={venta.id}>
                 <tr
@@ -58,6 +71,26 @@ export default function SalesTable({ ventas }: { ventas: Venta[] }) {
                   <td className="px-4 py-3 text-right font-semibold text-gold">
                     {formatCurrency(venta.total)}
                   </td>
+                  {onDelete && (
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDelete(venta);
+                        }}
+                        disabled={!esDeHoy}
+                        title={
+                          esDeHoy
+                            ? "Eliminar venta"
+                            : "Solo se pueden eliminar ventas del día actual"
+                        }
+                        className="rounded-md border border-panel-2 p-1.5 text-ink-soft transition-all duration-300 hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:border-panel-2 disabled:hover:bg-transparent disabled:hover:text-ink-soft"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </td>
+                  )}
                   <td className="px-4 py-3">
                     <ChevronDown
                       className={cn(
@@ -69,7 +102,7 @@ export default function SalesTable({ ventas }: { ventas: Venta[] }) {
                 </tr>
                 {expanded && (
                   <tr className="border-b border-panel-2 bg-canvas-soft last:border-0">
-                    <td colSpan={8} className="px-4 py-3">
+                    <td colSpan={columnCount} className="px-4 py-3">
                       <ul className="space-y-3">
                         {venta.items.map((item, index) => {
                           const lineas = grabadoLineas(item.grabado);

@@ -68,6 +68,8 @@ export interface MovimientoStock {
   notas?: string;
   /** True when `productoId` refers to a `packaging/{id}` doc instead of `productos/{codigo}`. */
   esPackaging?: boolean;
+  /** Present only on movements created by a sale — lets `eliminarVenta` find and revert exactly the movements a given sale caused. */
+  ventaId?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -154,6 +156,16 @@ export interface Venta {
   metodoPago: MetodoPago;
   cliente: string;
   celular: string;
+  fecha: Timestamp | null;
+  usuarioId: string;
+}
+
+/** Audit trail entry — currently written only when a sale is deleted (see `eliminarVenta` in lib/db.ts). */
+export interface AuditoriaVenta {
+  id: string;
+  tipo: "venta-eliminada";
+  ventaId: string;
+  ventaOriginal: Venta;
   fecha: Timestamp | null;
   usuarioId: string;
 }
